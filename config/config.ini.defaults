@@ -24,7 +24,7 @@ persistentConnection = FALSE
 logLevel = 300
 
 ; file to write log to
-logFile = "/PATH/TO/APP/data/logs/client.txt"
+logFile = "/PATH/TO/APP/data/logs/php-ssp-api.txt"
 
 ; Send mails to the following receipients of all log messages also written to
 ; to log file
