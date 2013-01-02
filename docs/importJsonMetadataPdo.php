@@ -17,7 +17,7 @@ $storage = new PdoStorage($config);
 foreach (glob($pathToMetadata . "/*.json") as $filename) {
     $jsonMetadata = file_get_contents($filename);
     $metadata = json_decode($jsonMetadata, TRUE);
-    $set = basename($filename, ".php");
+    $set = basename($filename, ".json");
     echo "importing set '$set'..." . PHP_EOL;
     foreach ($metadata as $m) {
         echo "\t" . $m['entityid'] . PHP_EOL;
