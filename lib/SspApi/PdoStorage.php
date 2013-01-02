@@ -153,12 +153,15 @@ class PdoStorage
     public function initDatabase()
     {
         foreach ($this->supportedSets as $s) {
-            $this->_pdo->exec("
-                CREATE TABLE IF NOT EXISTS `$s` (
-                entityId VARCHAR(255) NOT NULL,
-                entityData TEXT NOT NULL,
-                PRIMARY KEY (entityId))
-            ");
+            $result = $this->_pdo->exec("CREATE TABLE IF NOT EXISTS `$s` (id INTEGER PRIMARY KEY, entityId TEXT UNIQUE NOT NULL, entityData TEXT NOT NULL)");
+            if (FALSE === $result) {
+                throw new PdoStorageException("DB error: " . var_export($this->_pdo->errorInfo(), TRUE));
+            }
+            $indexName = $s . "-index";
+            $result = $this->_pdo->exec("CREATE INDEX IF NOT EXISTS `$indexName` ON `$s` (entityId)");
+            if (FALSE === $result) {
+                throw new PdoStorageException("DB error: " . var_export($this->_pdo->errorInfo(), TRUE));
+            }
         }
     }
 
