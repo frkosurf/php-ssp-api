@@ -68,20 +68,22 @@ class PdoStorage
         foreach ($data as $d) {
             $e = json_decode($d['entityData'], TRUE);
             $e['entityid'] = $d['entityId'];
+            $e['id'] = $d['id'];
+            //$entries[$d['id']] = $e;
             array_push($entries, $e);
         }
 
         return $entries;
     }
 
-    public function getEntry($set, $entityId)
+    public function getEntry($set, $id)
     {
         if (!in_array($set, $this->supportedSets)) {
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("SELECT * FROM `$set` WHERE entityId = :entityId");
-        $stmt->bindValue(":entityId", $entityId, PDO::PARAM_STR);
+        $stmt = $this->_pdo->prepare("SELECT * FROM `$set` WHERE id = :id");
+        $stmt->bindValue(":id", $id, PDO::PARAM_INT);
         $result = $stmt->execute();
         if (FALSE === $result) {
             // error in query
@@ -94,14 +96,15 @@ class PdoStorage
         return $entry;
     }
 
-    public function putEntry($set, $entityId, $entityData)
+    public function putEntry($set, $id, $entityData)
     {
         if (!in_array($set, $this->supportedSets)) {
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("UPDATE `$set` SET entityData = :entityData WHERE entityId = :entityId");
-        $stmt->bindValue(":entityId", $entityId, PDO::PARAM_STR);
+        $stmt = $this->_pdo->prepare("UPDATE `$set` SET entityId = :entityId AND entityData = :entityData WHERE id = :id");
+        $stmt->bindValue(":id", $id, PDO::PARAM_INT);
+        $stmt->bindValue(":entityId", $entityData['entityid'], PDO::PARAM_STR);
         $stmt->bindValue(":entityData", json_encode($entityData), PDO::PARAM_STR);
         $result = $stmt->execute();
         if (FALSE === $result) {
@@ -113,14 +116,14 @@ class PdoStorage
         return 1 === $stmt->rowCount();
     }
 
-    public function deleteEntry($set, $entityId)
+    public function deleteEntry($set, $id)
     {
         if (!in_array($set, $this->supportedSets)) {
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("DELETE FROM `$set` WHERE entityId = :entityId");
-        $stmt->bindValue(":entityId", $entityId, PDO::PARAM_STR);
+        $stmt = $this->_pdo->prepare("DELETE FROM `$set` WHERE id = :id");
+        $stmt->bindValue(":id", $id, PDO::PARAM_INT);
         $result = $stmt->execute();
         if (FALSE === $result) {
             // error in query

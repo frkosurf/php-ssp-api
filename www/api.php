@@ -47,32 +47,25 @@ try {
         $response->setContent(json_encode($storage->getEntries($set)));
     });
 
-    $request->matchRest("GET", "/:set/:entityId", function($set, $entityId) use ($storage, $response) {
+    $request->matchRest("GET", "/:set/:id", function($set, $id) use ($storage, $response) {
         //$rs->requireScope("ssp");
         //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
         // Apache rewrites URLs to not contain double "//". So we need to restore this... HOW ugly...
-        if (0 === strpos($entityId, "http:/")) {
-            $entityId = "http://" . substr($entityId, 6);
-        }
-        if (0 === strpos($entityId, "https:/")) {
-            $entityId = "https://" . substr($entityId, 7);
-        }
-
-        $response->setContent(json_encode($storage->getEntry($set, $entityId)));
+        $response->setContent(json_encode($storage->getEntry($set, $id)));
     });
 
-    $request->matchRest("DELETE", "/:set/:entityId", function($set, $entityId) use ($storage, $response) {
+    $request->matchRest("DELETE", "/:set/:id", function($set, $id) use ($storage, $response) {
         //$rs->requireScope("ssp");
         //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
 
-        $response->setContent(json_encode($storage->deleteEntry($set, $entityId)));
+        $response->setContent(json_encode($storage->deleteEntry($set, $id)));
     });
 
-    $request->matchRest("PUT", "/:set/:entityId", function($set, $entityId) use ($storage, $request, $response) {
+    $request->matchRest("PUT", "/:set/:id", function($set, $id) use ($storage, $request, $response) {
         //$rs->requireScope("ssp");
         //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
 
-        $response->setContent(json_encode($storage->putEntry($set, $entityId, $request->getContent())));
+        $response->setContent(json_encode($storage->putEntry($set, $id, $request->getContent())));
     });
 
     $request->matchRest("POST", "/:set/", function($set) use ($storage, $request, $response) {
