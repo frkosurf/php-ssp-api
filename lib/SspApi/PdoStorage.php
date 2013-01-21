@@ -168,14 +168,14 @@ class PdoStorage
     {
         foreach ($this->supportedSets as $s) {
             $tableName = $s;
-            $result = $this->pdo->exec($this->createTableQuery($tableName));
+            $result = $this->_pdo->exec($this->createTableQuery($tableName));
             if (FALSE === $result) {
-                throw new Exception("DB error: " . var_export($this->pdo->errorInfo(), TRUE));
+                throw new Exception("DB error: " . var_export($this->_pdo->errorInfo(), TRUE));
             }
             $indexName = $s . "_index";
-            $result = $this->pdo->exec("CREATE INDEX `$indexName` ON `$tableName` (`entity_id`)");
+            $result = $this->_pdo->exec("CREATE INDEX `$indexName` ON `$tableName` (`entity_id`)");
             if (FALSE === $result) {
-                throw new Exception("DB error: " . var_export($this->pdo->errorInfo(), TRUE));
+                throw new Exception("DB error: " . var_export($this->_pdo->errorInfo(), TRUE));
             }
         }
     }
