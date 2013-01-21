@@ -9,6 +9,7 @@ class PdoStorage
 {
     private $_c;
     private $_pdo;
+    private $_dsn;
 
     /**
      * All the metadata sets simpleSAMLphp supports
@@ -36,12 +37,10 @@ class PdoStorage
             $driverOptions = array(PDO::ATTR_PERSISTENT => TRUE);
         }
 
-        $this->_pdo = new PDO($this->_c->getSectionValue('PdoStorage', 'dsn'), $this->_c->getSectionValue('PdoStorage', 'username', FALSE), $this->_c->getSectionValue('PdoStorage', 'password', FALSE), $driverOptions);
+        $this->_dsn = $this->_c->getSectionValue('PdoStorage', 'dsn');
 
-        if (0 === strpos($this->_c->getSectionValue('PdoStorage', 'dsn'), "sqlite:")) {
-            // only for SQlite
-            $this->_pdo->exec("PRAGMA foreign_keys = ON");
-        }
+        $this->_pdo = new PDO($this->_dsn, $this->_c->getSectionValue('PdoStorage', 'username', FALSE), $this->_c->getSectionValue('PdoStorage', 'password', FALSE), $driverOptions);
+
     }
 
     public function getEntries($set)
@@ -66,8 +65,8 @@ class PdoStorage
         }
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($data as $d) {
-            $e = json_decode($d['entityData'], TRUE);
-            $e['entityid'] = $d['entityId'];
+            $e = json_decode($d['entity_data'], TRUE);
+            $e['entityid'] = $d['entity_id'];
             $e['id'] = $d['id'];
             //$entries[$d['id']] = $e;
             array_push($entries, $e);
@@ -102,10 +101,10 @@ class PdoStorage
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("UPDATE `$set` SET entityId = :entityId AND entityData = :entityData WHERE id = :id");
+        $stmt = $this->_pdo->prepare("UPDATE `$set` SET `entity_id` = :entity_id AND `entity_data` = :entity_data WHERE id = :id");
         $stmt->bindValue(":id", $id, PDO::PARAM_INT);
-        $stmt->bindValue(":entityId", $entityData['entityid'], PDO::PARAM_STR);
-        $stmt->bindValue(":entityData", json_encode($entityData), PDO::PARAM_STR);
+        $stmt->bindValue(":entity_id", $entityData['entityid'], PDO::PARAM_STR);
+        $stmt->bindValue(":entity_data", json_encode($entityData), PDO::PARAM_STR);
         $result = $stmt->execute();
         if (FALSE === $result) {
             // error in query
@@ -140,9 +139,9 @@ class PdoStorage
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("INSERT INTO `$set` ('entityId', 'entityData') VALUES(:entityId, :entityData)");
-        $stmt->bindValue(":entityId", $entityData['entityid'], PDO::PARAM_STR);
-        $stmt->bindValue(":entityData", json_encode($entityData), PDO::PARAM_STR);
+        $stmt = $this->_pdo->prepare("INSERT INTO `$set` (`entity_id`, `entity_data`) VALUES(:entity_id, :entity_data)");
+        $stmt->bindValue(":entity_id", $entityData['entityid'], PDO::PARAM_STR);
+        $stmt->bindValue(":entity_data", json_encode($entityData), PDO::PARAM_STR);
         $result = $stmt->execute();
         if (FALSE === $result) {
             // error in query
@@ -153,17 +152,30 @@ class PdoStorage
         return 1 === $stmt->rowCount();
     }
 
+    public function createTableQuery($tableName)
+    {
+        // create table queries for specific databases
+        if (0 === strpos($this->_dsn, "sqlite")) {
+            return "CREATE TABLE IF NOT EXISTS `$tableName` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `entity_id` VARCHAR(255) UNIQUE NOT NULL, `entity_data` TEXT NOT NULL)";
+        }
+        if (0 === strpos($this->_dsn, "mysql")) {
+            return "CREATE TABLE IF NOT EXISTS `$tableName` (`id` INTEGER PRIMARY KEY AUTO_INCREMENT, `entity_id` VARCHAR(255) UNIQUE NOT NULL, `entity_data` TEXT NOT NULL)";
+        }
+        throw new Exception("DB error: database not supported");
+    }
+
     public function initDatabase()
     {
         foreach ($this->supportedSets as $s) {
-            $result = $this->_pdo->exec("CREATE TABLE IF NOT EXISTS `$s` (id INTEGER PRIMARY KEY, entityId TEXT UNIQUE NOT NULL, entityData TEXT NOT NULL)");
+            $tableName = $this->tablePrefix . $s;
+            $result = $this->pdo->exec($this->createTableQuery($tableName));
             if (FALSE === $result) {
-                throw new PdoStorageException("DB error: " . var_export($this->_pdo->errorInfo(), TRUE));
+                throw new Exception("DB error: " . var_export($this->pdo->errorInfo(), TRUE));
             }
-            $indexName = $s . "-index";
-            $result = $this->_pdo->exec("CREATE INDEX IF NOT EXISTS `$indexName` ON `$s` (entityId)");
+            $indexName = $s . "_index";
+            $result = $this->pdo->exec("CREATE INDEX `$indexName` ON `$tableName` (`entity_id`)");
             if (FALSE === $result) {
-                throw new PdoStorageException("DB error: " . var_export($this->_pdo->errorInfo(), TRUE));
+                throw new Exception("DB error: " . var_export($this->pdo->errorInfo(), TRUE));
             }
         }
     }
