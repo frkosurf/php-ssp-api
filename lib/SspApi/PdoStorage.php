@@ -167,7 +167,7 @@ class PdoStorage
     public function initDatabase()
     {
         foreach ($this->supportedSets as $s) {
-            $tableName = $this->tablePrefix . $s;
+            $tableName = $s;
             $result = $this->pdo->exec($this->createTableQuery($tableName));
             if (FALSE === $result) {
                 throw new Exception("DB error: " . var_export($this->pdo->errorInfo(), TRUE));
