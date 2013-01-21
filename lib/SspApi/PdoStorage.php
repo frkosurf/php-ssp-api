@@ -90,7 +90,7 @@ class PdoStorage
             return FALSE;
         }
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
-        $entry = json_decode($data['entityData'], TRUE);
+        $entry = json_decode($data['entity_data'], TRUE);
 
         return $entry;
     }
