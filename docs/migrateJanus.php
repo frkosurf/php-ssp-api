@@ -94,9 +94,19 @@ function fetchMetadata($type, array $result)
         }
 
         if ($nameEn !== $nameNl) {
-            echo "name:en => $nameEn" . PHP_EOL . "name:nl => $nameNl" . PHP_EOL . PHP_EOL;
+            echo "WARNING: name not equal" . PHP_EOL . "\tname:en => $nameEn" . PHP_EOL . "\tname:nl => $nameNl" . PHP_EOL . PHP_EOL;
         }
-        $metadata['name'] = $nameEn;
+
+        // first set Dutch name
+        if (!empty($nameNl)) {
+            $metadata['name'] = $nameEn;
+        }
+
+        // override with English if it is available
+        if (!empty($nameEn)) {
+            $metadata['name'] = $nameEn;
+        }
+
     }
 
     if ("saml20-sp" === $type) {
@@ -117,9 +127,19 @@ function fetchMetadata($type, array $result)
         }
 
         if ($nameEn !== $nameNl) {
-            echo "name:en => $nameEn" . PHP_EOL . "name:nl => $nameNl" . PHP_EOL . PHP_EOL;
+            echo "WARNING: name not equal" . PHP_EOL . "\tname:en => $nameEn" . PHP_EOL . "\tname:nl => $nameNl" . PHP_EOL . PHP_EOL;
         }
-        $metadata['name'] = $nameEn;
+
+        // first set Dutch name
+        if (!empty($nameNl)) {
+            $metadata['name'] = $nameEn;
+        }
+
+        // override with English if it is available
+        if (!empty($nameEn)) {
+            $metadata['name'] = $nameEn;
+        }
+
     }
 
     return $metadata;
