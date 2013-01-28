@@ -47,24 +47,34 @@ try {
         $response->setContent(json_encode($storage->getEntries($set)));
     });
 
-    $request->matchRest("GET", "/:set/:id", function($set, $id) use ($storage, $response) {
+    $request->matchRest("GET", "/:set/entity", function($set) use ($storage, $response, $request) {
         //$rs->requireScope("ssp");
         //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
         // Apache rewrites URLs to not contain double "//". So we need to restore this... HOW ugly...
+        $id = $request->getQueryParameter("id");
+        if (NULL === $id) {
+           throw new ApiException("not_found", "resource not found");
+        }
         $response->setContent(json_encode($storage->getEntry($set, $id)));
     });
 
-    $request->matchRest("DELETE", "/:set/:id", function($set, $id) use ($storage, $response) {
+    $request->matchRest("DELETE", "/:set/entity", function($set) use ($storage, $response, $request) {
         //$rs->requireScope("ssp");
         //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
-
+        $id = $request->getQueryParameter("id");
+        if (NULL === $id) {
+           throw new ApiException("not_found", "resource not found");
+        }
         $response->setContent(json_encode($storage->deleteEntry($set, $id)));
     });
 
-    $request->matchRest("PUT", "/:set/:id", function($set, $id) use ($storage, $request, $response) {
+    $request->matchRest("PUT", "/:set/entity", function($set) use ($storage, $request, $response) {
         //$rs->requireScope("ssp");
         //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
-
+        $id = $request->getQueryParameter("id");
+        if (NULL === $id) {
+           throw new ApiException("not_found", "resource not found");
+        }
         $response->setContent(json_encode($storage->putEntry($set, $id, $request->getContent())));
     });
 

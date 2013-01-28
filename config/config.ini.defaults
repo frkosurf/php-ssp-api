@@ -5,6 +5,7 @@ dsn = "sqlite:/PATH/TO/APP/data/metadata.sqlite";
 ;dsn = "mysql:host=localhost;dbname=oauth"
 ;username = "oauth"
 ;password = "s3cr3t"
+tablePrefix = ""
 
 ; use a persistent DB connection, make sure to ENABLE this for PRODUCTION 
 ; systems

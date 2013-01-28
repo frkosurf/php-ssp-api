@@ -40,7 +40,7 @@ class PdoStorage
         $this->_dsn = $this->_c->getSectionValue('PdoStorage', 'dsn');
 
         $this->_pdo = new PDO($this->_dsn, $this->_c->getSectionValue('PdoStorage', 'username', FALSE), $this->_c->getSectionValue('PdoStorage', 'password', FALSE), $driverOptions);
-
+        $this->_pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     }
 
     public function getEntries($set)
@@ -51,24 +51,12 @@ class PdoStorage
 
         $entries = array();
 
-        $stmt = $this->_pdo->prepare("SELECT * FROM `$set`");
-        if (FALSE === $stmt) {
-            // error in query, pretend we found no entries...
-            // FIXME: log error
-            return array();
-        }
-        $result = $stmt->execute();
-        if (FALSE === $result) {
-            // query failed, pretend we found no entries...
-            // FIXME: log error
-            return array();
-        }
+        $stmt = $this->_pdo->prepare("SELECT `entity_id`, `entity_data` FROM `$set`");
+        $stmt->execute();
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($data as $d) {
             $e = json_decode($d['entity_data'], TRUE);
             $e['entityid'] = $d['entity_id'];
-            $e['id'] = $d['id'];
-            //$entries[$d['id']] = $e;
             array_push($entries, $e);
         }
 
@@ -81,14 +69,9 @@ class PdoStorage
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("SELECT * FROM `$set` WHERE id = :id");
-        $stmt->bindValue(":id", $id, PDO::PARAM_INT);
-        $result = $stmt->execute();
-        if (FALSE === $result) {
-            // error in query
-            // FIXME: log/throw error
-            return FALSE;
-        }
+        $stmt = $this->_pdo->prepare("SELECT * FROM `$set` WHERE `entity_id` = :entity_id");
+        $stmt->bindValue(":entity_id", $id, PDO::PARAM_STR);
+        $stmt->execute();
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
         $entry = json_decode($data['entity_data'], TRUE);
 
@@ -101,16 +84,10 @@ class PdoStorage
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("UPDATE `$set` SET `entity_id` = :entity_id AND `entity_data` = :entity_data WHERE id = :id");
-        $stmt->bindValue(":id", $id, PDO::PARAM_INT);
+        $stmt = $this->_pdo->prepare("UPDATE `$set` SET `entity_id` = :entity_id AND `entity_data` = :entity_data WHERE `entity_id` = :entity_id");
         $stmt->bindValue(":entity_id", $entityData['entityid'], PDO::PARAM_STR);
         $stmt->bindValue(":entity_data", json_encode($entityData), PDO::PARAM_STR);
-        $result = $stmt->execute();
-        if (FALSE === $result) {
-            // error in query
-            // FIXME: log/throw error
-            return FALSE;
-        }
+        $stmt->execute();
 
         return 1 === $stmt->rowCount();
     }
@@ -121,14 +98,9 @@ class PdoStorage
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("DELETE FROM `$set` WHERE id = :id");
-        $stmt->bindValue(":id", $id, PDO::PARAM_INT);
-        $result = $stmt->execute();
-        if (FALSE === $result) {
-            // error in query
-            // FIXME: log/throw error
-            return FALSE;
-        }
+        $stmt = $this->_pdo->prepare("DELETE FROM `$set` WHERE `entity_id` = :entity_id");
+        $stmt->bindValue(":entity_id", $id, PDO::PARAM_STR);
+        $stmt->execute();
 
         return 1 === $stmt->rowCount();
     }
@@ -142,41 +114,19 @@ class PdoStorage
         $stmt = $this->_pdo->prepare("INSERT INTO `$set` (`entity_id`, `entity_data`) VALUES(:entity_id, :entity_data)");
         $stmt->bindValue(":entity_id", $entityData['entityid'], PDO::PARAM_STR);
         $stmt->bindValue(":entity_data", json_encode($entityData), PDO::PARAM_STR);
-        $result = $stmt->execute();
-        if (FALSE === $result) {
-            // error in query
-            // FIXME: log/throw error
-            return FALSE;
-        }
+        $stmt->execute();
 
         return 1 === $stmt->rowCount();
     }
 
-    public function createTableQuery($tableName)
-    {
-        // create table queries for specific databases
-        if (0 === strpos($this->_dsn, "sqlite")) {
-            return "CREATE TABLE IF NOT EXISTS `$tableName` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `entity_id` VARCHAR(255) UNIQUE NOT NULL, `entity_data` TEXT NOT NULL)";
-        }
-        if (0 === strpos($this->_dsn, "mysql")) {
-            return "CREATE TABLE IF NOT EXISTS `$tableName` (`id` INTEGER PRIMARY KEY AUTO_INCREMENT, `entity_id` VARCHAR(255) UNIQUE NOT NULL, `entity_data` TEXT NOT NULL)";
-        }
-        throw new Exception("DB error: database not supported");
-    }
-
     public function initDatabase()
     {
+        $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
+
         foreach ($this->supportedSets as $s) {
-            $tableName = $s;
-            $result = $this->_pdo->exec($this->createTableQuery($tableName));
-            if (FALSE === $result) {
-                throw new Exception("DB error: " . var_export($this->_pdo->errorInfo(), TRUE));
-            }
-            $indexName = $s . "_index";
-            $result = $this->_pdo->exec("CREATE INDEX `$indexName` ON `$tableName` (`entity_id`)");
-            if (FALSE === $result) {
-                throw new Exception("DB error: " . var_export($this->_pdo->errorInfo(), TRUE));
-            }
+            $tableName = $tablePrefix . $s;
+            $query = "CREATE TABLE IF NOT EXISTS `$tableName` (`entity_id` VARCHAR(255) PRIMARY KEY NOT NULL, `entity_data` TEXT NOT NULL)";
+            $this->_pdo->exec($query);
         }
     }
 
