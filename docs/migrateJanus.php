@@ -36,9 +36,9 @@ foreach ($data as $type => $entries) {
             $sth->execute();
             $arpResult = $sth->fetch(PDO::FETCH_ASSOC);
             if (NULL !== $arpResult['attributes']) {
-                $data[$type][$eid]['arp'] = array_keys(unserialize($arpResult['attributes']));
+                $data[$type][$eid]['attributes'] = array_keys(unserialize($arpResult['attributes']));
             } else {
-                $data[$type][$eid]['arp'] = array();
+                $data[$type][$eid]['attributes'] = array();
             }
         }
 
