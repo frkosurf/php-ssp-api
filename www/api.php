@@ -40,11 +40,11 @@ try {
 
     $response = new HttpResponse(200, "application/json");
 
-    $request->matchRest("GET", "/:set/", function($set) use ($storage, $response) {
+    $request->matchRest("GET", "/:set/", function($set) use ($storage, $response, $request) {
         //$rs->requireScope("ssp");
         //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
-
-        $response->setContent(json_encode($storage->getEntries($set)));
+        $searchQuery = $request->getQueryParameter('searchQuery');
+        $response->setContent(json_encode($storage->getEntries($set, $searchQuery)));
     });
 
     $request->matchRest("GET", "/:set/entity", function($set) use ($storage, $response, $request) {

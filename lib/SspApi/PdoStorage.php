@@ -43,7 +43,7 @@ class PdoStorage
         $this->_pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     }
 
-    public function getEntries($set)
+    public function getEntries($set, $searchQuery)
     {
         if (!in_array($set, $this->supportedSets)) {
             return array();
@@ -54,7 +54,12 @@ class PdoStorage
         $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
         $tableName = $tablePrefix . $set;
 
-        $stmt = $this->_pdo->prepare("SELECT `entity_id`, `entity_data` FROM `$tableName`");
+        if (NULL === $searchQuery) {
+            $stmt = $this->_pdo->prepare("SELECT `entity_id`, `entity_data` FROM `$tableName`");
+        } else {
+            $stmt = $this->_pdo->prepare("SELECT `entity_id`, `entity_data` FROM `$tableName` WHERE entity_data LIKE :searchQuery");
+            $stmt->bindValue(":searchQuery", '%' . $searchQuery . '%', PDO::PARAM_STR);
+        }
         $stmt->execute();
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($data as $d) {
