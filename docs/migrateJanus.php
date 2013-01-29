@@ -48,18 +48,62 @@ foreach ($data as $type => $entries) {
         $sth->bindValue(":eid", $eid);
         $sth->bindValue(":revisionid", $result['revisionid']);
         $sth->execute();
-        $result = $sth->fetchAll(PDO::FETCH_ASSOC);
+        $metadataResult = $sth->fetchAll(PDO::FETCH_ASSOC);
 
-        $metadata = fetchMetadata($type, $result);
+        $metadata = fetchMetadata($type, $metadataResult);
         $data[$type][$eid] += $metadata;
-    }
 
-    // write data for this type to JSON file
-    $encoding = json_encode(array_values($data[$type]));
-    file_put_contents($argv[1] . DIRECTORY_SEPARATOR . $type . "-remote.json", $encoding);
+        // get the ACL
+        $sql = "SELECT `remoteeid` FROM `janus__allowedEntity` WHERE `eid` = :eid AND `revisionid` = :revisionid";
+        $sth = $pdo->prepare($sql);
+        $sth->bindValue(":eid", $eid);
+        $sth->bindValue(":revisionid", $result['revisionid']);
+        $sth->execute();
+        $aclResult = $sth->fetchAll(PDO::FETCH_ASSOC);
+
+        $aclList = array();
+        foreach ($aclResult as $aclEntry) {
+            array_push($aclList, $aclEntry['remoteeid']);
+        }
+
+        if ("saml20-sp" === $type) {
+            $data[$type][$eid]['idpList'] = $aclList;
+        }
+        if ("saml20-idp" === $type) {
+            $data[$type][$eid]['spList'] = $aclList;
+        }
+    }
 }
 
-// var_export($data);
+// now fiddle with ACL
+foreach ($data as $type => $entries) {
+    foreach ($entries as $eid => $values) {
+        if ("saml20-sp" === $type) {
+            // find the idpList
+            foreach ($values['idpList'] as $k => $v) {
+                if (array_key_exists($v, $data['saml20-idp'])) {
+                    $data["saml20-sp"][$eid]['idpList'][$k] = $data['saml20-idp'][$v]['entityid'];
+                }
+            }
+        }
+        if ("saml20-idp" === $type) {
+            // find the spList
+            foreach ($values['spList'] as $k => $v) {
+                if (array_key_exists($v, $data['saml20-sp'])) {
+                    $data["saml20-idp"][$eid]['spList'][$k] = $data['saml20-sp'][$v]['entityid'];
+                }
+            }
+        }
+    }
+}
+
+// write data for IdPs to JSON file
+$encoding = json_encode(array_values($data["saml20-idp"]));
+file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", $encoding);
+
+// write data for SPs to JSON file
+$encoding = json_encode(array_values($data["saml20-sp"]));
+file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-sp-remote.json", $encoding);
 
 function fetchMetadata($type, array $result)
 {
@@ -93,15 +137,17 @@ function fetchMetadata($type, array $result)
             }
         }
 
-        if ($nameEn !== $nameNl) {
-            echo "WARNING: name not equal" . PHP_EOL . "\tname:en => $nameEn" . PHP_EOL . "\tname:nl => $nameNl" . PHP_EOL . PHP_EOL;
+        // name fiddling
+        if (empty($nameEn)) {
+        //    echo "WARNING: EN SP  name not set [$entityId]" . PHP_EOL;
         }
-
+        if (empty($nameNl)) {
+        //    echo "WARNING: NL SP  name not set [$entityId]" . PHP_EOL;
+        }
         // first set Dutch name
         if (!empty($nameNl)) {
             $metadata['name'] = $nameEn;
         }
-
         // override with English if it is available
         if (!empty($nameEn)) {
             $metadata['name'] = $nameEn;
@@ -126,15 +172,17 @@ function fetchMetadata($type, array $result)
             }
         }
 
-        if ($nameEn !== $nameNl) {
-            echo "WARNING: name not equal" . PHP_EOL . "\tname:en => $nameEn" . PHP_EOL . "\tname:nl => $nameNl" . PHP_EOL . PHP_EOL;
+        // name fiddling
+        if (empty($nameEn)) {
+        //    echo "WARNING: EN SP  name not set [$entityId]" . PHP_EOL;
         }
-
+        if (empty($nameNl)) {
+        //    echo "WARNING: NL SP  name not set [$entityId]" . PHP_EOL;
+        }
         // first set Dutch name
         if (!empty($nameNl)) {
             $metadata['name'] = $nameEn;
         }
-
         // override with English if it is available
         if (!empty($nameEn)) {
             $metadata['name'] = $nameEn;
