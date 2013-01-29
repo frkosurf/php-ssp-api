@@ -51,7 +51,10 @@ class PdoStorage
 
         $entries = array();
 
-        $stmt = $this->_pdo->prepare("SELECT `entity_id`, `entity_data` FROM `$set`");
+        $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
+        $tableName = $tablePrefix . $set;
+
+        $stmt = $this->_pdo->prepare("SELECT `entity_id`, `entity_data` FROM `$tableName`");
         $stmt->execute();
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($data as $d) {
@@ -69,7 +72,10 @@ class PdoStorage
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("SELECT * FROM `$set` WHERE `entity_id` = :entity_id");
+        $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
+        $tableName = $tablePrefix . $set;
+
+        $stmt = $this->_pdo->prepare("SELECT `entity_data` FROM `$tableName` WHERE `entity_id` = :entity_id");
         $stmt->bindValue(":entity_id", $id, PDO::PARAM_STR);
         $stmt->execute();
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -84,7 +90,10 @@ class PdoStorage
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("UPDATE `$set` SET `entity_id` = :entity_id AND `entity_data` = :entity_data WHERE `entity_id` = :entity_id");
+        $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
+        $tableName = $tablePrefix . $set;
+
+        $stmt = $this->_pdo->prepare("UPDATE `$tableName` SET `entity_id` = :entity_id AND `entity_data` = :entity_data WHERE `entity_id` = :entity_id");
         $stmt->bindValue(":entity_id", $entityData['entityid'], PDO::PARAM_STR);
         $stmt->bindValue(":entity_data", json_encode($entityData), PDO::PARAM_STR);
         $stmt->execute();
@@ -98,7 +107,10 @@ class PdoStorage
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("DELETE FROM `$set` WHERE `entity_id` = :entity_id");
+        $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
+        $tableName = $tablePrefix . $set;
+
+        $stmt = $this->_pdo->prepare("DELETE FROM `$tableName` WHERE `entity_id` = :entity_id");
         $stmt->bindValue(":entity_id", $id, PDO::PARAM_STR);
         $stmt->execute();
 
@@ -111,7 +123,10 @@ class PdoStorage
             return array();
         }
 
-        $stmt = $this->_pdo->prepare("INSERT INTO `$set` (`entity_id`, `entity_data`) VALUES(:entity_id, :entity_data)");
+        $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
+        $tableName = $tablePrefix . $set;
+
+        $stmt = $this->_pdo->prepare("INSERT INTO `$tableName` (`entity_id`, `entity_data`) VALUES(:entity_id, :entity_data)");
         $stmt->bindValue(":entity_id", $entityData['entityid'], PDO::PARAM_STR);
         $stmt->bindValue(":entity_data", json_encode($entityData), PDO::PARAM_STR);
         $stmt->execute();
