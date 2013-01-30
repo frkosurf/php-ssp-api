@@ -9,69 +9,79 @@ $data = array();
 $pdo = new PDO("mysql:host=localhost;dbname=janus", "janus", "janus");
 
 // figure out all eids for both sp and idp that are prodaccepted and active
-$sql = "SELECT eid,type FROM janus__entity WHERE active='yes' AND state='prodaccepted' GROUP BY eid ORDER BY eid";
+$sql = "SELECT eid FROM janus__entity GROUP BY eid ORDER BY eid";
 $sth = $pdo->prepare($sql);
 $sth->execute();
 $result = $sth->fetchAll(PDO::FETCH_ASSOC);
 
+$data = array();
+
 foreach ($result as $r) {
-    $data[$r['type']][$r['eid']] = array();
-}
+    $eid = $r['eid'];
+    // figure out the latest revision of the eids and the entityid
+    $sql = "SELECT entityid, revisionid, arp, state, active, type FROM janus__entity WHERE eid=:eid ORDER BY revisionid DESC LIMIT 0,1";
+    $sth = $pdo->prepare($sql);
+    $sth->bindValue(":eid", $eid);
+    $sth->execute();
+    $result = $sth->fetch(PDO::FETCH_ASSOC);
 
-foreach ($data as $type => $entries) {
-    foreach ($entries as $eid => $values) {
-        // figure out the latest revision of the eids and the entityid
-        $sql = "SELECT entityid,revisionid,arp FROM janus__entity WHERE eid=:eid ORDER BY revisionid DESC LIMIT 0,1";
+    if ("prodaccepted" !== $result['state'] || "yes" !== $result['active']) {
+        // we only want prodaccepted and active entries
+        continue;
+    }
+
+    $type = $result['type'];
+    $data[$type][$eid]['entityid'] = $result['entityid'];
+
+    // get ARP if entry is a service provider
+    if ("saml20-sp" === $type) {
+        $sql = "SELECT attributes FROM janus__arp WHERE aid = :aid";
         $sth = $pdo->prepare($sql);
-        $sth->bindValue(":eid", $eid);
+        $sth->bindValue(":aid", $result['arp']);
         $sth->execute();
-        $result = $sth->fetch(PDO::FETCH_ASSOC);
-        $data[$type][$eid]['entityid'] = $result['entityid'];
-
-        // get ARP if entry is a service provider
-        if ("saml20-sp" === $type) {
-            $sql = "SELECT attributes FROM janus__arp WHERE aid = :aid";
-            $sth = $pdo->prepare($sql);
-            $sth->bindValue(":aid", $result['arp']);
-            $sth->execute();
-            $arpResult = $sth->fetch(PDO::FETCH_ASSOC);
-            if (NULL !== $arpResult['attributes']) {
-                $data[$type][$eid]['attributes'] = array_keys(unserialize($arpResult['attributes']));
-            } else {
-                $data[$type][$eid]['attributes'] = array();
-            }
+        $arpResult = $sth->fetch(PDO::FETCH_ASSOC);
+        if (NULL !== $arpResult['attributes']) {
+            $data[$type][$eid]['attributes'] = array_keys(unserialize($arpResult['attributes']));
+        } else {
+            $data[$type][$eid]['attributes'] = array();
         }
+    }
 
-        // figure out some metadata parameters
-        $sql = "SELECT `key`, `value` FROM `janus__metadata` WHERE `eid` = :eid AND `revisionid` = :revisionid";
-        $sth = $pdo->prepare($sql);
-        $sth->bindValue(":eid", $eid);
-        $sth->bindValue(":revisionid", $result['revisionid']);
-        $sth->execute();
-        $metadataResult = $sth->fetchAll(PDO::FETCH_ASSOC);
+    // figure out some metadata parameters
+    $sql = "SELECT `key`, `value` FROM `janus__metadata` WHERE `eid` = :eid AND `revisionid` = :revisionid";
+    $sth = $pdo->prepare($sql);
+    $sth->bindValue(":eid", $eid);
+    $sth->bindValue(":revisionid", $result['revisionid']);
+    $sth->execute();
+    $metadataResult = $sth->fetchAll(PDO::FETCH_ASSOC);
 
-        $metadata = fetchMetadata($type, $metadataResult);
-        $data[$type][$eid] += $metadata;
+    $metadata = fetchMetadata($type, $metadataResult);
+    if (FALSE === $metadata) {
+//        echo "WARNING: " . $result['entityid'] . " missing required " . $type . " values" . PHP_EOL;
+        unset($data[$type][$eid]);
+        continue;
+    }
 
-        // get the ACL
-        $sql = "SELECT `remoteeid` FROM `janus__allowedEntity` WHERE `eid` = :eid AND `revisionid` = :revisionid";
-        $sth = $pdo->prepare($sql);
-        $sth->bindValue(":eid", $eid);
-        $sth->bindValue(":revisionid", $result['revisionid']);
-        $sth->execute();
-        $aclResult = $sth->fetchAll(PDO::FETCH_ASSOC);
+    $data[$type][$eid] += $metadata;
 
-        $aclList = array();
-        foreach ($aclResult as $aclEntry) {
-            array_push($aclList, $aclEntry['remoteeid']);
-        }
+    // get the ACL
+    $sql = "SELECT `remoteeid` FROM `janus__allowedEntity` WHERE `eid` = :eid AND `revisionid` = :revisionid";
+    $sth = $pdo->prepare($sql);
+    $sth->bindValue(":eid", $eid);
+    $sth->bindValue(":revisionid", $result['revisionid']);
+    $sth->execute();
+    $aclResult = $sth->fetchAll(PDO::FETCH_ASSOC);
 
-        if ("saml20-sp" === $type) {
-            $data[$type][$eid]['idpList'] = $aclList;
-        }
-        if ("saml20-idp" === $type) {
-            $data[$type][$eid]['spList'] = $aclList;
-        }
+    $aclList = array();
+    foreach ($aclResult as $aclEntry) {
+        array_push($aclList, $aclEntry['remoteeid']);
+    }
+
+    if ("saml20-sp" === $type) {
+        $data[$type][$eid]['idpList'] = $aclList;
+    }
+    if ("saml20-idp" === $type) {
+        $data[$type][$eid]['spList'] = $aclList;
     }
 }
 
@@ -83,6 +93,9 @@ foreach ($data as $type => $entries) {
             foreach ($values['idpList'] as $k => $v) {
                 if (array_key_exists($v, $data['saml20-idp'])) {
                     $data["saml20-sp"][$eid]['idpList'][$k] = $data['saml20-idp'][$v]['entityid'];
+                } else {
+                    //echo "WARNING: SP " . $values['entityid'] . " (" . $eid . ") contains non-existing IdP $v" . PHP_EOL;
+                    unset($data["saml20-sp"][$eid]['idpList'][$k]);
                 }
             }
         }
@@ -91,18 +104,24 @@ foreach ($data as $type => $entries) {
             foreach ($values['spList'] as $k => $v) {
                 if (array_key_exists($v, $data['saml20-sp'])) {
                     $data["saml20-idp"][$eid]['spList'][$k] = $data['saml20-sp'][$v]['entityid'];
+                } else {
+                    //echo "WARNING: IdP " . $values['entityid'] . " (" . $eid . ") contains non-existing SP $v" . PHP_EOL;
+                    unset($data["saml20-idp"][$eid]['spList'][$k]);
                 }
             }
         }
     }
 }
 
+$idpList = array_values($data["saml20-idp"]);
+$spList = array_values($data["saml20-sp"]);
+
 // write data for IdPs to JSON file
-$encoding = json_encode(array_values($data["saml20-idp"]));
+$encoding = json_encode($idpList);
 file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", $encoding);
 
 // write data for SPs to JSON file
-$encoding = json_encode(array_values($data["saml20-sp"]));
+$encoding = json_encode($spList);
 file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-sp-remote.json", $encoding);
 
 function fetchMetadata($type, array $result)
@@ -137,6 +156,10 @@ function fetchMetadata($type, array $result)
             }
         }
 
+//        if (!empty($nameEn) && !empty($nameNl) && $nameEn !== $nameNl) {
+//            echo "EN: " . $nameEn . PHP_EOL . "NL: " . $nameNl . PHP_EOL . PHP_EOL;
+//        }
+
         // name fiddling
         if (empty($nameEn)) {
         //    echo "WARNING: EN SP  name not set [$entityId]" . PHP_EOL;
@@ -151,6 +174,15 @@ function fetchMetadata($type, array $result)
         // override with English if it is available
         if (!empty($nameEn)) {
             $metadata['name'] = $nameEn;
+        }
+
+        // SSO MUST be set
+        if (!array_key_exists("SingleSignOnService", $metadata) || empty($metadata['SingleSignOnService'])) {
+            return FALSE;
+        }
+        // certFingerprint MUST be set
+        if (!array_key_exists("certFingerprint", $metadata) || empty($metadata['certFingerprint'])) {
+            return FALSE;
         }
 
     }
@@ -172,6 +204,10 @@ function fetchMetadata($type, array $result)
             }
         }
 
+//        if (!empty($nameEn) && !empty($nameNl) && $nameEn !== $nameNl) {
+//            echo "EN: " . $nameEn . PHP_EOL . "NL: " . $nameNl . PHP_EOL . PHP_EOL;
+//        }
+
         // name fiddling
         if (empty($nameEn)) {
         //    echo "WARNING: EN SP  name not set [$entityId]" . PHP_EOL;
@@ -188,6 +224,10 @@ function fetchMetadata($type, array $result)
             $metadata['name'] = $nameEn;
         }
 
+        // ACS must be set
+        if (!array_key_exists("AssertionConsumerService", $metadata) || empty($metadata['AssertionConsumerService'])) {
+            return FALSE;
+        }
     }
 
     return $metadata;
