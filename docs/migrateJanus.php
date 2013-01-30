@@ -78,10 +78,10 @@ foreach ($result as $r) {
     }
 
     if ("saml20-sp" === $type) {
-        $data[$type][$eid]['idpList'] = $aclList;
+        $data[$type][$eid]['IDPList'] = $aclList;
     }
     if ("saml20-idp" === $type) {
-        $data[$type][$eid]['spList'] = $aclList;
+        $data[$type][$eid]['SPList'] = $aclList;
     }
 }
 
@@ -90,23 +90,23 @@ foreach ($data as $type => $entries) {
     foreach ($entries as $eid => $values) {
         if ("saml20-sp" === $type) {
             // find the idpList
-            foreach ($values['idpList'] as $k => $v) {
+            foreach ($values['IDPList'] as $k => $v) {
                 if (array_key_exists($v, $data['saml20-idp'])) {
-                    $data["saml20-sp"][$eid]['idpList'][$k] = $data['saml20-idp'][$v]['entityid'];
+                    $data["saml20-sp"][$eid]['IDPList'][$k] = $data['saml20-idp'][$v]['entityid'];
                 } else {
                     //echo "WARNING: SP " . $values['entityid'] . " (" . $eid . ") contains non-existing IdP $v" . PHP_EOL;
-                    unset($data["saml20-sp"][$eid]['idpList'][$k]);
+                    unset($data["saml20-sp"][$eid]['IDPList'][$k]);
                 }
             }
         }
         if ("saml20-idp" === $type) {
             // find the spList
-            foreach ($values['spList'] as $k => $v) {
+            foreach ($values['SPList'] as $k => $v) {
                 if (array_key_exists($v, $data['saml20-sp'])) {
-                    $data["saml20-idp"][$eid]['spList'][$k] = $data['saml20-sp'][$v]['entityid'];
+                    $data["saml20-idp"][$eid]['SPList'][$k] = $data['saml20-sp'][$v]['entityid'];
                 } else {
                     //echo "WARNING: IdP " . $values['entityid'] . " (" . $eid . ") contains non-existing SP $v" . PHP_EOL;
-                    unset($data["saml20-idp"][$eid]['spList'][$k]);
+                    unset($data["saml20-idp"][$eid]['SPList'][$k]);
                 }
             }
         }
@@ -115,23 +115,50 @@ foreach ($data as $type => $entries) {
 
 // verify whether ACL entries on the SP side have matching entry on the IdP side
 foreach ($data['saml20-sp'] as $k => $v) {
-    if (!empty($v['idpList'])) {
-        // echo "SP " . $spEntry['entityid'] . " has " . count($v['idpList']) . " IdPs in the ACL" . PHP_EOL;
-        foreach ($v['idpList'] as $idp) {
+    if (!empty($v['IDPList'])) {
+        // echo "SP " . $spEntry['entityid'] . " has " . count($v['IDPList']) . " IdPs in the ACL" . PHP_EOL;
+        foreach ($v['IDPList'] as $idp) {
         //    echo "\t" . $idp . PHP_EOL;
             // look for this SP in the idpList
             foreach ($data['saml20-idp'] as $idpEntry) {
                 if ($idpEntry['entityid'] === $idp) {
-                    if (!in_array($v['entityid'], $idpEntry['spList'])) {
+                    if (!in_array($v['entityid'], $idpEntry['SPList'])) {
                         //echo "SP " . $v['entityid'] . " not found at IdP " . $idp . PHP_EOL;
                     }
                 }
             }
         }
         // empty the idpList, we fill this from the IdP side later
-        $data['saml20-sp'][$k]['idpList'] = array();
+        $data['saml20-sp'][$k]['IDPList'] = array();
     }
 }
+
+// now for every IdP add its entityid to the idpList of the SP it lists in its
+// spList
+foreach ($data['saml20-idp'] as $k => $v) {
+    foreach ($v['SPList'] as $sp) {
+        // look for $sp in the saml20-sp data structure
+        foreach ($data['saml20-sp'] as $spKey => $spEntry) {
+            if ($spEntry['entityid'] === $sp) {
+                array_push($data['saml20-sp'][$spKey]['IDPList'], $v['entityid']);
+            }
+        }
+    }
+
+    // remove the spList entry as all ACLs are now configured at the SP
+    unset($data['saml20-idp'][$k]['SPList']);
+}
+
+// print all list of unique attributes used in the ARPs of all SPs
+$allAttributes = array();
+foreach ($data['saml20-sp'] as $k => $v) {
+    foreach ($v['attributes'] as $a) {
+        if (!in_array($a, $allAttributes)) {
+            array_push($allAttributes, $a);
+        }
+    }
+}
+// echo json_encode($allAttributes) . PHP_EOL;
 
 $idpList = array_values($data["saml20-idp"]);
 $spList = array_values($data["saml20-sp"]);
