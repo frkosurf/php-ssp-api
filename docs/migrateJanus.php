@@ -85,7 +85,7 @@ foreach ($result as $r) {
     }
 }
 
-// now fiddle with ACL
+// now replace eids with entityids in the lists
 foreach ($data as $type => $entries) {
     foreach ($entries as $eid => $values) {
         if ("saml20-sp" === $type) {
@@ -110,6 +110,26 @@ foreach ($data as $type => $entries) {
                 }
             }
         }
+    }
+}
+
+// verify whether ACL entries on the SP side have matching entry on the IdP side
+foreach ($data['saml20-sp'] as $k => $v) {
+    if (!empty($v['idpList'])) {
+        // echo "SP " . $spEntry['entityid'] . " has " . count($v['idpList']) . " IdPs in the ACL" . PHP_EOL;
+        foreach ($v['idpList'] as $idp) {
+        //    echo "\t" . $idp . PHP_EOL;
+            // look for this SP in the idpList
+            foreach ($data['saml20-idp'] as $idpEntry) {
+                if ($idpEntry['entityid'] === $idp) {
+                    if (!in_array($v['entityid'], $idpEntry['spList'])) {
+                        //echo "SP " . $v['entityid'] . " not found at IdP " . $idp . PHP_EOL;
+                    }
+                }
+            }
+        }
+        // empty the idpList, we fill this from the IdP side later
+        $data['saml20-sp'][$k]['idpList'] = array();
     }
 }
 
