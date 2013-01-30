@@ -55,7 +55,7 @@ foreach ($result as $r) {
     $sth->execute();
     $metadataResult = $sth->fetchAll(PDO::FETCH_ASSOC);
 
-    $metadata = fetchMetadata($type, $metadataResult);
+    $metadata = fetchMetadata($type, $metadataResult, $result['entityid']);
     if (FALSE === $metadata) {
 //        echo "WARNING: " . $result['entityid'] . " missing required " . $type . " values" . PHP_EOL;
         unset($data[$type][$eid]);
@@ -171,7 +171,7 @@ file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", $en
 $encoding = json_encode($spList);
 file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-sp-remote.json", $encoding);
 
-function fetchMetadata($type, array $result)
+function fetchMetadata($type, array $result, $entityId)
 {
     $metadata = array();
 
@@ -189,6 +189,7 @@ function fetchMetadata($type, array $result)
             if ($entry['key'] === 'SingleLogoutService:0:Location') {
                 $metadata['SingleLogoutService'] = $entry['value'];
             }
+
             if ($entry['key'] === 'name:en') {
                 $nameEn = $entry['value'];
             }
@@ -241,8 +242,33 @@ function fetchMetadata($type, array $result)
 
         foreach ($result as $entry) {
             if ($entry['key'] === 'AssertionConsumerService:0:Location') {
-                $metadata['AssertionConsumerService'] = $entry['value'];
+                $metadata['AssertionConsumerService']['Location'] = $entry['value'];
             }
+            if ($entry['key'] === 'AssertionConsumerService:0:Binding') {
+                if ("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" !== $entry['value']) {
+                    // echo "WARNING: " . $entityId . " does not use HTTP-POST binding, but '" . $entry['value'] . "' instead" . PHP_EOL;
+                }
+                $metadata['AssertionConsumerService']['Binding'] = $entry['value'];
+            }
+            if ($entry['key'] === 'NameIDFormat') {
+                $validNameIDs = array (
+                    "urn:oasis:names:tc:SAML:2.0:nameid-format:transient",
+                    "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
+                    "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+                    "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified");
+
+                // fix unspecified format, 2.0 --> 1.1
+                if ("urn:oasis:names:tc:SAML:2.0:nameid-format:unspecified" === $entry['value']) {
+                    $entry['value'] = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified";
+                }
+
+                if (!in_array($entry['value'], $validNameIDs)) {
+                    echo "WARNING: " . $entityId . " has invalid NameIDFormat '" . $entry['value'] . "'" . PHP_EOL;
+                }
+
+                $metadata['NameIDFormat'] = $entry['value'];
+            }
+
             if ($entry['key'] === 'name:en') {
                 $nameEn = $entry['value'];
             }
@@ -274,6 +300,16 @@ function fetchMetadata($type, array $result)
         // ACS must be set
         if (!array_key_exists("AssertionConsumerService", $metadata) || empty($metadata['AssertionConsumerService'])) {
             return FALSE;
+        }
+        if (!array_key_exists("Location", $metadata['AssertionConsumerService']) || empty($metadata['AssertionConsumerService']['Location'])) {
+            return FALSE;
+        }
+        if (!array_key_exists("Binding", $metadata['AssertionConsumerService']) || empty($metadata['AssertionConsumerService']['Binding'])) {
+            $metadata['AssertionConsumerService']['Binding'] = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST";
+        }
+        if (!array_key_exists("NameIDFormat", $metadata) || empty($metadata['NameIDFormat'])) {
+            // FIXME: what is the SURFconext default? Maybe it is persistent!
+            $metadata['NameIDFormat'] = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient";
         }
     }
 
