@@ -226,10 +226,12 @@ function fetchMetadata($type, array $result, $entityId)
 
         // SSO MUST be set
         if (!array_key_exists("SingleSignOnService", $metadata) || empty($metadata['SingleSignOnService'])) {
+            echo "WARNING: SingleSignOnService not set for $entityId" . PHP_EOL;
             return FALSE;
         }
         // certFingerprint MUST be set
         if (!array_key_exists("certFingerprint", $metadata) || empty($metadata['certFingerprint'])) {
+            echo "WARNING: certFingerprint not set for $entityId" . PHP_EOL;
             return FALSE;
         }
 
@@ -299,16 +301,17 @@ function fetchMetadata($type, array $result, $entityId)
 
         // ACS must be set
         if (!array_key_exists("AssertionConsumerService", $metadata) || empty($metadata['AssertionConsumerService'])) {
+            echo "WARNING: AssertionConsumerService not set for $entityId" . PHP_EOL;
             return FALSE;
         }
         if (!array_key_exists("Location", $metadata['AssertionConsumerService']) || empty($metadata['AssertionConsumerService']['Location'])) {
+            echo "WARNING: AssertionConsumerService Location not set for $entityId" . PHP_EOL;
             return FALSE;
         }
         if (!array_key_exists("Binding", $metadata['AssertionConsumerService']) || empty($metadata['AssertionConsumerService']['Binding'])) {
             $metadata['AssertionConsumerService']['Binding'] = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST";
         }
         if (!array_key_exists("NameIDFormat", $metadata) || empty($metadata['NameIDFormat'])) {
-            // FIXME: what is the SURFconext default? Maybe it is persistent!
             $metadata['NameIDFormat'] = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient";
         }
     }
