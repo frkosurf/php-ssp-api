@@ -6,7 +6,7 @@ if ($argc < 2) {
 
 $data = array();
 
-$pdo = new PDO("mysql:host=localhost;dbname=janus", "janus", "janus");
+$pdo = new PDO("mysql:host=127.0.0.1;dbname=sr", "root", NULL);
 
 // figure out all eids for both sp and idp that are prodaccepted and active
 $sql = "SELECT eid FROM janus__entity GROUP BY eid ORDER BY eid";
@@ -19,7 +19,7 @@ $data = array();
 foreach ($result as $r) {
     $eid = $r['eid'];
     // figure out the latest revision of the eids and the entityid
-    $sql = "SELECT entityid, revisionid, arp, state, active, type FROM janus__entity WHERE eid=:eid ORDER BY revisionid DESC LIMIT 0,1";
+    $sql = "SELECT entityid, revisionid, arp, state, active, type, metadataurl FROM janus__entity WHERE eid=:eid ORDER BY revisionid DESC LIMIT 0,1";
     $sth = $pdo->prepare($sql);
     $sth->bindValue(":eid", $eid);
     $sth->execute();
@@ -32,6 +32,28 @@ foreach ($result as $r) {
 
     $type = $result['type'];
     $data[$type][$eid]['entityid'] = $result['entityid'];
+
+    $mdu = trim($result['metadataurl']);
+    if (empty($mdu)) {
+        $mdu = NULL;
+    }
+    if (NULL !== $mdu) {
+        // seems to be a metadata URL
+        // check if it is valid
+
+        if (FALSE === filter_var($mdu, FILTER_VALIDATE_URL)) {
+            echo "WARNING: invalid metadata URL '" . $mdu . "'" . PHP_EOL;
+            $mdu = NULL;
+        }
+#        $md = @file_get_contents($mdu);
+#        if (FALSE === $md) {
+#            echo "WARNING: unable to retrieve data at metadata URL '" . $mdu . "'" . PHP_EOL;
+#            $mdu = NULL;
+#        }
+        echo "INFO: metadata URL [" . $type . "]-->" . $mdu . PHP_EOL;
+        // see if the retrieved data is XML
+    }
+    $data[$type][$eid]['metadataurl'] = $mdu;
 
     // get ARP if entry is a service provider
     if ("saml20-sp" === $type) {
@@ -227,11 +249,13 @@ function fetchMetadata($type, array $result, $entityId)
         // SSO MUST be set
         if (!array_key_exists("SingleSignOnService", $metadata) || empty($metadata['SingleSignOnService'])) {
             echo "WARNING: SingleSignOnService not set for $entityId" . PHP_EOL;
+
             return FALSE;
         }
         // certFingerprint MUST be set
         if (!array_key_exists("certFingerprint", $metadata) || empty($metadata['certFingerprint'])) {
             echo "WARNING: certFingerprint not set for $entityId" . PHP_EOL;
+
             return FALSE;
         }
 
@@ -302,10 +326,12 @@ function fetchMetadata($type, array $result, $entityId)
         // ACS must be set
         if (!array_key_exists("AssertionConsumerService", $metadata) || empty($metadata['AssertionConsumerService'])) {
             echo "WARNING: AssertionConsumerService not set for $entityId" . PHP_EOL;
+
             return FALSE;
         }
         if (!array_key_exists("Location", $metadata['AssertionConsumerService']) || empty($metadata['AssertionConsumerService']['Location'])) {
             echo "WARNING: AssertionConsumerService Location not set for $entityId" . PHP_EOL;
+
             return FALSE;
         }
         if (!array_key_exists("Binding", $metadata['AssertionConsumerService']) || empty($metadata['AssertionConsumerService']['Binding'])) {
