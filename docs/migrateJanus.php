@@ -200,6 +200,8 @@ function fetchMetadata($type, array $result, $entityId)
         $nameEn = "";
         $nameNl = "";
 
+        $keywords = array();
+
         $metadata['certFingerprint'] = array();
 
         foreach ($result as $entry) {
@@ -229,6 +231,14 @@ function fetchMetadata($type, array $result, $entityId)
             }
             if ($entry['key'] === 'name:nl') {
                 $nameNl = $entry['value'];
+            }
+
+            // keywords
+            if ($entry['key'] === 'keywords:en') {
+                $keywords += explode(" ", $entry['value']);
+            }
+            if ($entry['key'] === 'keywords:nl') {
+                $keywords += explode(" ", $entry['value']);
             }
 
             // certificate
@@ -306,6 +316,12 @@ function fetchMetadata($type, array $result, $entityId)
             $metadata['UIInfo']['Logo']['height'] = $height;
             $metadata['UIInfo']['Logo']['width'] = $width;
         }
+
+        // keywords
+        // remove empty ones
+        $keywords = array_filter($keywords, function($v) { return !empty($v); });
+        sort($keywords);
+        $metadata['UIInfo']['Keywords'] = array_unique(array_values($keywords));
     }
 
     if ("saml20-sp" === $type) {
