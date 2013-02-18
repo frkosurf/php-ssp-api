@@ -114,7 +114,7 @@ foreach ($data as $type => $entries) {
                 if (array_key_exists($v, $data['saml20-idp'])) {
                     $data["saml20-sp"][$eid]['IDPList'][$k] = $data['saml20-idp'][$v]['entityid'];
                 } else {
-                    //echo "WARNING: SP " . $values['entityid'] . " (" . $eid . ") contains non-existing IdP $v" . PHP_EOL;
+                    echo "WARNING: SP " . $values['entityid'] . " (" . $eid . ") contains non-existing IdP $v" . PHP_EOL;
                     unset($data["saml20-sp"][$eid]['IDPList'][$k]);
                 }
             }
@@ -125,7 +125,7 @@ foreach ($data as $type => $entries) {
                 if (array_key_exists($v, $data['saml20-sp'])) {
                     $data["saml20-idp"][$eid]['SPList'][$k] = $data['saml20-sp'][$v]['entityid'];
                 } else {
-                    //echo "WARNING: IdP " . $values['entityid'] . " (" . $eid . ") contains non-existing SP $v" . PHP_EOL;
+                    echo "WARNING: IdP " . $values['entityid'] . " (" . $eid . ") contains non-existing SP $v" . PHP_EOL;
                     unset($data["saml20-idp"][$eid]['SPList'][$k]);
                 }
             }
@@ -143,7 +143,7 @@ foreach ($data['saml20-sp'] as $k => $v) {
             foreach ($data['saml20-idp'] as $idpEntry) {
                 if ($idpEntry['entityid'] === $idp) {
                     if (!in_array($v['entityid'], $idpEntry['SPList'])) {
-                        //echo "SP " . $v['entityid'] . " not found at IdP " . $idp . PHP_EOL;
+                        echo "WARNING: SP " . $v['entityid'] . " not found at IdP " . $idp . PHP_EOL;
                     }
                 }
             }
@@ -178,7 +178,8 @@ foreach ($data['saml20-sp'] as $k => $v) {
         }
     }
 }
-// echo json_encode($allAttributes) . PHP_EOL;
+echo "ALL ATTRIBUTES USED IN 'ARP':" . PHP_EOL;
+echo json_encode($allAttributes) . PHP_EOL;
 
 $idpList = array_values($data["saml20-idp"]);
 $spList = array_values($data["saml20-sp"]);
@@ -321,7 +322,7 @@ function fetchMetadata($type, array $result, $entityId)
         // remove empty ones
         $keywords = array_filter($keywords, function($v) { return !empty($v); });
         sort($keywords);
-        $metadata['UIInfo']['Keywords'] = array_unique(array_values($keywords));
+        $metadata['UIInfo']['Keywords'] = array_values(array_unique($keywords));
     }
 
     if ("saml20-sp" === $type) {
@@ -335,7 +336,7 @@ function fetchMetadata($type, array $result, $entityId)
             }
             if ($entry['key'] === 'AssertionConsumerService:0:Binding') {
                 if ("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" !== $entry['value']) {
-                    // echo "WARNING: " . $entityId . " does not use HTTP-POST binding, but '" . $entry['value'] . "' instead" . PHP_EOL;
+                    echo "WARNING: " . $entityId . " does not use HTTP-POST binding, but '" . $entry['value'] . "' instead" . PHP_EOL;
                 }
                 $metadata['AssertionConsumerService']['Binding'] = $entry['value'];
             }
