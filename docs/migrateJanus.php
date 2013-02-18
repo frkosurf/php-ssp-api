@@ -35,24 +35,22 @@ foreach ($result as $r) {
 
     $mdu = trim($result['metadataurl']);
     if (empty($mdu)) {
+
         $mdu = NULL;
     }
-    if (NULL !== $mdu) {
+    if (!empty($mdu)) {
         // seems to be a metadata URL
         // check if it is valid
-
         if (FALSE === filter_var($mdu, FILTER_VALIDATE_URL)) {
             echo "WARNING: invalid metadata URL '" . $mdu . "'" . PHP_EOL;
             $mdu = NULL;
         }
-#        $md = @file_get_contents($mdu);
-#        if (FALSE === $md) {
-#            echo "WARNING: unable to retrieve data at metadata URL '" . $mdu . "'" . PHP_EOL;
-#            $mdu = NULL;
-#        }
-        echo "INFO: metadata URL [" . $type . "]-->" . $mdu . PHP_EOL;
-        // see if the retrieved data is XML
+        // echo "INFO: " . $type . " metadata URL: " . $mdu . PHP_EOL;
+    } else {
+        echo "WARNING: missing metadate URL for " . $result['entityid'] . PHP_EOL;
+        $mdu = NULL;
     }
+
     $data[$type][$eid]['metadataurl'] = $mdu;
 
     // get ARP if entry is a service provider
@@ -212,12 +210,28 @@ function fetchMetadata($type, array $result, $entityId)
                 $metadata['SingleLogoutService'] = $entry['value'];
             }
 
+            // logo
+            if ($entry['key'] === 'logo:0:url' && !empty($entry['value'])) {
+                $metadata['UIInfo']['Logo']['url'] = $entry['value'];
+            }
+
+            if ($entry['key'] === 'logo:0:width' && is_numeric($entry['value'])) {
+                $metadata['UIInfo']['Logo']['width'] = (int) $entry['value'];
+            }
+
+            if ($entry['key'] === 'logo:0:height' && is_numeric($entry['value'])) {
+                $metadata['UIInfo']['Logo']['height'] = (int) $entry['value'];
+            }
+
+            // name
             if ($entry['key'] === 'name:en') {
                 $nameEn = $entry['value'];
             }
             if ($entry['key'] === 'name:nl') {
                 $nameNl = $entry['value'];
             }
+
+            // certificate
             if ($entry['key'] === "certData") {
                 array_push($metadata['certFingerprint'], sha1(base64_decode($entry['value'])));
             }
@@ -259,6 +273,39 @@ function fetchMetadata($type, array $result, $entityId)
             return FALSE;
         }
 
+        if (!array_key_exists("UIInfo", $metadata)) {
+            echo "WARNING: logo not set for " . $entityId . PHP_EOL;
+        }
+
+        // validate logo
+        if (array_key_exists("UIInfo", $metadata) && array_key_exists("Logo", $metadata['UIInfo']) && array_key_exists("url", $metadata['UIInfo']['Logo'])) {
+            // url available, height and width should be set
+            $is = getimagesize($metadata['UIInfo']['Logo']['url']);
+            if (FALSE === $is || !is_array($is) || count($is) < 2) {
+                echo "WARNING: unable to decode logo for " . $entityId . PHP_EOL;
+                unset($metadata['UIInfo']['Logo']);
+                continue;
+            }
+            list($width, $height) = getimagesize($metadata['UIInfo']['Logo']['url']);
+
+            if (!array_key_exists("height", $metadata['UIInfo']['Logo'])) {
+                echo "WARNING: logo height not set for " . $entityId . ", is: " . $height . PHP_EOL;
+            } else {
+                if ($height !== $metadata['UIInfo']['Logo']['height']) {
+                    echo "WARNING: logo height does not match actual picture height for " . $entityId . ", is: " . $height . ", specified: " . $metadata['UIInfo']['Logo']['height'] . PHP_EOL;
+                }
+            }
+            if (!array_key_exists("width", $metadata['UIInfo']['Logo'])) {
+                echo "WARNING: logo width not set for " . $entityId . ", is: " . $width . PHP_EOL;
+            } else {
+                if ($width !== $metadata['UIInfo']['Logo']['width']) {
+                    echo "WARNING: logo width does not match actual picture width for " . $entityId . ", is: " . $width . ", specified: " . $metadata['UIInfo']['Logo']['width'] . PHP_EOL;
+                }
+            }
+            // override image size based on actual size of logo anyway
+            $metadata['UIInfo']['Logo']['height'] = $height;
+            $metadata['UIInfo']['Logo']['width'] = $width;
+        }
     }
 
     if ("saml20-sp" === $type) {
