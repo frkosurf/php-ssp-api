@@ -202,6 +202,7 @@ function fetchMetadata($type, array $result, $entityId)
         $nameNl = "";
 
         $keywords = array();
+        $contacts = array();
 
         $metadata['certFingerprint'] = array();
 
@@ -224,6 +225,13 @@ function fetchMetadata($type, array $result, $entityId)
 
             if ($entry['key'] === 'logo:0:height' && is_numeric($entry['value'])) {
                 $metadata['UIInfo']['Logo']['height'] = (int) $entry['value'];
+            }
+
+            // contacts
+            if (strpos($entry['key'], 'contacts:') === 0) {
+                // determine number
+                list($c_foo, $c_no, $c_t) = explode(":", $entry['key']);
+                $contacts[$c_no][$c_t] = $entry['value'];
             }
 
             // name
@@ -271,6 +279,9 @@ function fetchMetadata($type, array $result, $entityId)
             $metadata['name'] = $nameEn;
         }
 
+        // cleanup contacts
+        $metadata['contacts'] = cleanUpContacts($contacts);
+
         // SSO MUST be set
         if (!array_key_exists("SingleSignOnService", $metadata) || empty($metadata['SingleSignOnService'])) {
             echo "WARNING: SingleSignOnService not set for $entityId" . PHP_EOL;
@@ -291,13 +302,14 @@ function fetchMetadata($type, array $result, $entityId)
         // validate logo
         if (array_key_exists("UIInfo", $metadata) && array_key_exists("Logo", $metadata['UIInfo']) && array_key_exists("url", $metadata['UIInfo']['Logo'])) {
             // url available, height and width should be set
-            $is = getimagesize($metadata['UIInfo']['Logo']['url']);
+            $is = @getimagesize($metadata['UIInfo']['Logo']['url']);
             if (FALSE === $is || !is_array($is) || count($is) < 2) {
                 echo "WARNING: unable to decode logo for " . $entityId . PHP_EOL;
                 unset($metadata['UIInfo']['Logo']);
-                continue;
+                // FIXME: go to next item...?!
+                //continue;
             }
-            list($width, $height) = getimagesize($metadata['UIInfo']['Logo']['url']);
+            list($width, $height) = $is;
 
             if (!array_key_exists("height", $metadata['UIInfo']['Logo'])) {
                 echo "WARNING: logo height not set for " . $entityId . ", is: " . $height . PHP_EOL;
@@ -316,19 +328,42 @@ function fetchMetadata($type, array $result, $entityId)
             // override image size based on actual size of logo anyway
             $metadata['UIInfo']['Logo']['height'] = $height;
             $metadata['UIInfo']['Logo']['width'] = $width;
+            // needs to be array, FIXME: make this nice!
+            $metadata['UIInfo']['Logo'] = array($metadata['UIInfo']['Logo']);
         }
 
         // keywords
-        // remove empty ones
-        $keywords = array_filter($keywords, function($v) { return !empty($v); });
+        // remove empty keywords and keywords that contains a "+" symbol or need html encoding
+        $keywords = array_filter($keywords, function($v) use ($entityId) {
+            if (empty($v)) {
+                echo "WARNING: empty keyword for " . $entityId . PHP_EOL;
+
+                return FALSE;
+            }
+            if (strpos($v, "+") !== FALSE) {
+                echo "WARNING: keyword contains '+' for " . $entityId . PHP_EOL;
+
+                return FALSE;
+            }
+            if (htmlentities($v) !== $v) {
+                echo "WARNING: keyword '" . $v . "' contains special characters for " . $entityId . PHP_EOL;
+
+                return FALSE;
+            }
+
+            return TRUE;
+        });
+
         sort($keywords);
-        $metadata['UIInfo']['Keywords'] = array_values(array_unique($keywords));
+        $metadata['UIInfo']['Keywords']['en'] = array_values(array_unique($keywords));
     }
 
     if ("saml20-sp" === $type) {
 
         $nameEn = "";
         $nameNl = "";
+
+        $contacts = array();
 
         foreach ($result as $entry) {
             if ($entry['key'] === 'AssertionConsumerService:0:Location') {
@@ -359,6 +394,13 @@ function fetchMetadata($type, array $result, $entityId)
                 $metadata['NameIDFormat'] = $entry['value'];
             }
 
+            // contacts
+            if (strpos($entry['key'], 'contacts:') === 0) {
+                // determine number
+                list($c_foo, $c_no, $c_t) = explode(":", $entry['key']);
+                $contacts[$c_no][$c_t] = $entry['value'];
+            }
+
             if ($entry['key'] === 'name:en') {
                 $nameEn = $entry['value'];
             }
@@ -387,6 +429,9 @@ function fetchMetadata($type, array $result, $entityId)
             $metadata['name'] = $nameEn;
         }
 
+        // cleanup contacts
+        $metadata['contacts'] = cleanUpContacts($contacts);
+
         // ACS must be set
         if (!array_key_exists("AssertionConsumerService", $metadata) || empty($metadata['AssertionConsumerService'])) {
             echo "WARNING: AssertionConsumerService not set for $entityId" . PHP_EOL;
@@ -407,4 +452,30 @@ function fetchMetadata($type, array $result, $entityId)
     }
 
     return $metadata;
+}
+
+function cleanUpContacts(array $contacts)
+{
+    $cleanedContacts = array();
+    foreach ($contacts as $k => $v) {
+        if (array_key_exists("contactType", $v)) {
+            if (in_array($v['contactType'], array("technical", "administrative", "support"))) {
+                if (array_key_exists("emailAddress", $v) && !empty($v['emailAddress'])) {
+                    if (FALSE !== filter_var($v['emailAddress'], FILTER_VALIDATE_EMAIL)) {
+                        // valid email address, valid contact type
+                        $c = array("emailAddress" => $v['emailAddress'], "contactType" => $v['contactType']);
+                        if (array_key_exists("givenName", $v) && !empty($v['givenName'])) {
+                            $c['givenName'] = $v['givenName'];
+                        }
+                        if (array_key_exists("surName", $v) && !empty($v['surName'])) {
+                            $c['surName'] = $v['surName'];
+                        }
+                        array_push($cleanedContacts, $c);
+                    }
+                }
+            }
+        }
+    }
+
+    return $cleanedContacts;
 }
