@@ -244,10 +244,10 @@ function fetchMetadata($type, array $result, $entityId)
 
             // keywords
             if ($entry['key'] === 'keywords:en') {
-                $keywords += explode(" ", $entry['value']);
+                $keywords["en"] = explode(" ", $entry['value']);
             }
             if ($entry['key'] === 'keywords:nl') {
-                $keywords += explode(" ", $entry['value']);
+                $keywords["nl"] = explode(" ", $entry['value']);
             }
 
             // certificate
@@ -334,28 +334,38 @@ function fetchMetadata($type, array $result, $entityId)
 
         // keywords
         // remove empty keywords and keywords that contains a "+" symbol or need html encoding
-        $keywords = array_filter($keywords, function($v) use ($entityId) {
-            if (empty($v)) {
-                echo "WARNING: empty keyword for " . $entityId . PHP_EOL;
+        foreach ($keywords as $k => $v) {
+            $keywords[$k] = array_filter($keywords[$k], function($v) use ($entityId) {
+                if (empty($v)) {
+                    echo "WARNING: empty keyword for " . $entityId . PHP_EOL;
 
-                return FALSE;
-            }
-            if (strpos($v, "+") !== FALSE) {
-                echo "WARNING: keyword contains '+' for " . $entityId . PHP_EOL;
+                    return FALSE;
+                }
+                if (strpos($v, "+") !== FALSE) {
+                    echo "WARNING: keyword contains '+' for " . $entityId . PHP_EOL;
 
-                return FALSE;
-            }
-            if (htmlentities($v) !== $v) {
-                echo "WARNING: keyword '" . $v . "' contains special characters for " . $entityId . PHP_EOL;
+                    return FALSE;
+                }
+                if (htmlentities($v) !== $v) {
+                    echo "WARNING: keyword '" . $v . "' contains special characters for " . $entityId . PHP_EOL;
 
-                return FALSE;
-            }
+                    return FALSE;
+                }
 
-            return TRUE;
-        });
+                return TRUE;
+            });
+        }
+        sort($keywords["en"]);
+        sort($keywords["nl"]);
 
-        sort($keywords);
-        $metadata['UIInfo']['Keywords']['en'] = array_values(array_unique($keywords));
+        $metadata['UIInfo']['Keywords']["en"] = array_values(array_unique($keywords["en"]));
+        $metadata['UIInfo']['Keywords']["nl"] = array_values(array_unique($keywords["nl"]));
+
+        $x = array_diff($metadata['UIInfo']['Keywords']["en"], $metadata['UIInfo']['Keywords']["nl"]);
+        if (count($x) !== 0) {
+            echo "INFO: non matching keywords for " . $entityId . PHP_EOL;
+        }
+
     }
 
     if ("saml20-sp" === $type) {
