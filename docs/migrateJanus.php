@@ -272,7 +272,7 @@ function fetchMetadata($type, array $result, $entityId)
         }
         // first set Dutch name
         if (!empty($nameNl)) {
-            $metadata['name'] = $nameEn;
+            $metadata['name'] = $nameNl;
         }
         // override with English if it is available
         if (!empty($nameEn)) {
@@ -426,7 +426,7 @@ function fetchMetadata($type, array $result, $entityId)
         }
         // first set Dutch name
         if (!empty($nameNl)) {
-            $metadata['name'] = $nameEn;
+            $metadata['name'] = $nameNl;
         }
         // override with English if it is available
         if (!empty($nameEn)) {
