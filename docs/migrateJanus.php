@@ -360,12 +360,6 @@ function fetchMetadata($type, array $result, $entityId)
 
         $metadata['UIInfo']['Keywords']["en"] = array_values(array_unique($keywords["en"]));
         $metadata['UIInfo']['Keywords']["nl"] = array_values(array_unique($keywords["nl"]));
-
-        $x = array_diff($metadata['UIInfo']['Keywords']["en"], $metadata['UIInfo']['Keywords']["nl"]);
-        if (count($x) !== 0) {
-            echo "INFO: non matching keywords for " . $entityId . PHP_EOL;
-        }
-
     }
 
     if ("saml20-sp" === $type) {
