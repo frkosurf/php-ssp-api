@@ -198,8 +198,8 @@ function fetchMetadata($type, array $result, $entityId)
 
     if ("saml20-idp" === $type) {
 
-        $nameEn = "";
-        $nameNl = "";
+        $name = array();
+        $displayName = array();
 
         $keywords = array();
         $contacts = array();
@@ -235,11 +235,14 @@ function fetchMetadata($type, array $result, $entityId)
             }
 
             // name
-            if ($entry['key'] === 'name:en') {
-                $nameEn = $entry['value'];
+            if (strpos($entry['key'], 'name:') === 0) {
+                list(, $c_lang) = explode(":", $entry['key']);
+                $name[$c_lang] = $entry['value'];
             }
-            if ($entry['key'] === 'name:nl') {
-                $nameNl = $entry['value'];
+            // displayName
+            if (strpos($entry['key'], 'displayName:') === 0) {
+                list(, $c_lang) = explode(":", $entry['key']);
+                $displayName[$c_lang] = $entry['value'];
             }
 
             // keywords
@@ -259,25 +262,7 @@ function fetchMetadata($type, array $result, $entityId)
             }
         }
 
-//        if (!empty($nameEn) && !empty($nameNl) && $nameEn !== $nameNl) {
-//            echo "EN: " . $nameEn . PHP_EOL . "NL: " . $nameNl . PHP_EOL . PHP_EOL;
-//        }
-
-        // name fiddling
-        if (empty($nameEn)) {
-        //    echo "WARNING: EN SP  name not set [$entityId]" . PHP_EOL;
-        }
-        if (empty($nameNl)) {
-        //    echo "WARNING: NL SP  name not set [$entityId]" . PHP_EOL;
-        }
-        // first set Dutch name
-        if (!empty($nameNl)) {
-            $metadata['name'] = $nameNl;
-        }
-        // override with English if it is available
-        if (!empty($nameEn)) {
-            $metadata['name'] = $nameEn;
-        }
+        cleanupName($entityId, $metadata, $name, $displayName);
 
         // cleanup contacts
         $metadata['contacts'] = cleanUpContacts($contacts);
@@ -364,8 +349,8 @@ function fetchMetadata($type, array $result, $entityId)
 
     if ("saml20-sp" === $type) {
 
-        $nameEn = "";
-        $nameNl = "";
+        $name = array();
+        $displayName = array();
 
         $contacts = array();
 
@@ -405,33 +390,20 @@ function fetchMetadata($type, array $result, $entityId)
                 $contacts[$c_no][$c_t] = $entry['value'];
             }
 
-            if ($entry['key'] === 'name:en') {
-                $nameEn = $entry['value'];
+            // name
+            if (strpos($entry['key'], 'name:') === 0) {
+                list(, $c_lang) = explode(":", $entry['key']);
+                $name[$c_lang] = $entry['value'];
             }
-            if ($entry['key'] === 'name:nl') {
-                $nameNl = $entry['value'];
+            // displayName
+            if (strpos($entry['key'], 'displayName:') === 0) {
+                list(, $c_lang) = explode(":", $entry['key']);
+                $displayName[$c_lang] = $entry['value'];
             }
+
         }
 
-//        if (!empty($nameEn) && !empty($nameNl) && $nameEn !== $nameNl) {
-//            echo "EN: " . $nameEn . PHP_EOL . "NL: " . $nameNl . PHP_EOL . PHP_EOL;
-//        }
-
-        // name fiddling
-        if (empty($nameEn)) {
-        //    echo "WARNING: EN SP  name not set [$entityId]" . PHP_EOL;
-        }
-        if (empty($nameNl)) {
-        //    echo "WARNING: NL SP  name not set [$entityId]" . PHP_EOL;
-        }
-        // first set Dutch name
-        if (!empty($nameNl)) {
-            $metadata['name'] = $nameNl;
-        }
-        // override with English if it is available
-        if (!empty($nameEn)) {
-            $metadata['name'] = $nameEn;
-        }
+        cleanupName($entityId, $metadata, $name, $displayName);
 
         // cleanup contacts
         $metadata['contacts'] = cleanUpContacts($contacts);
@@ -482,4 +454,39 @@ function cleanUpContacts(array $contacts)
     }
 
     return $cleanedContacts;
+}
+
+function cleanupName($entityId, array &$metadata, array $name, array $displayName)
+{
+    // remove empty names
+    foreach ($name as $lang => $value) {
+        if (empty($value)) {
+            unset($name[$lang]);
+        }
+    }
+
+    // remove empty displayNames
+    foreach ($displayName as $lang => $value) {
+        if (empty($value)) {
+            unset($displayName[$lang]);
+        }
+    }
+
+    if (count(array_diff(array_keys($name), array_keys($displayName))) !== 0) {
+        echo "WARNING: name and displayName do not have same languages for " . $entityId . PHP_EOL;
+    } else {
+        // same languages
+        foreach ($name as $lang => $value) {
+            if ($value !== $displayName[$lang]) {
+                echo "WARNING: mismatch between name and displayName '" . $lang . "' [" . $value . "," . $displayName[$lang] . "] for " . $entityId . PHP_EOL;
+            }
+        }
+    }
+
+    if (!empty($name)) {
+        $metadata['name'] = $name;
+    }
+    if (!empty($displayName)) {
+        $metadata['displayName'] = $displayName;
+    }
 }
