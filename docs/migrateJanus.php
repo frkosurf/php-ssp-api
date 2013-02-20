@@ -483,10 +483,32 @@ function cleanupName($entityId, array &$metadata, array $name, array $displayNam
         }
     }
 
+    // fill displayName based on name if displayName for that language is not set...
+    foreach ($name as $lang => $value) {
+        if (!array_key_exists($lang, $displayName)) {
+            $displayName[$lang] = $value;
+        }
+    }
+
+    // fill name based on displayName if name for that language is not set...
+    foreach ($displayName as $lang => $value) {
+        if (!array_key_exists($lang, $name)) {
+            $name[$lang] = $value;
+        }
+    }
+
+    if (!array_key_exists("en", $name)) {
+        echo "WARNING: missing EN name for " . $entityId . PHP_EOL;
+    }
+
+    if (!array_key_exists("en", $displayName)) {
+        echo "WARNING: missing EN displayName for " . $entityId . PHP_EOL;
+    }
+
     if (!empty($name)) {
         $metadata['name'] = $name;
     }
     if (!empty($displayName)) {
-        $metadata['displayName'] = $displayName;
+        $metadata['UIInfo']['DisplayName'] = $displayName;
     }
 }
