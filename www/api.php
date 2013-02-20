@@ -82,7 +82,7 @@ try {
         //$rs->requireScope("ssp");
         //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
 
-        $response->setContent(json_encode($storage->putEntry($set, $request->getContent())));
+        $response->setContent(json_encode($storage->postEntry($set, $request->getContent())));
     });
 
     $request->matchRestDefault(function($methodMatch, $patternMatch) use ($request, $response) {
