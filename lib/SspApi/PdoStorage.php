@@ -43,13 +43,9 @@ class PdoStorage
         $this->_pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     }
 
-    public function getEntries($set, $searchQuery)
+    public function getEntities($set, $searchQuery = NULL)
     {
-        if (!in_array($set, $this->supportedSets)) {
-            return array();
-        }
-
-        $entries = array();
+        $entities = array();
 
         $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
         $tableName = $tablePrefix . $set;
@@ -65,18 +61,14 @@ class PdoStorage
         foreach ($data as $d) {
             $e = json_decode($d['entity_data'], TRUE);
             $e['entityid'] = $d['entity_id'];
-            array_push($entries, $e);
+            array_push($entities, $e);
         }
 
-        return $entries;
+        return $entities;
     }
 
-    public function getEntry($set, $id)
+    public function getEntity($set, $id)
     {
-        if (!in_array($set, $this->supportedSets)) {
-            return array();
-        }
-
         $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
         $tableName = $tablePrefix . $set;
 
@@ -84,17 +76,13 @@ class PdoStorage
         $stmt->bindValue(":entity_id", $id, PDO::PARAM_STR);
         $stmt->execute();
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
-        $entry = json_decode($data['entity_data'], TRUE);
 
-        return $entry;
+        // if entity was not found, return FALSE
+        return 1 === count($data) ? json_decode($data['entity_data'], TRUE) : FALSE;
     }
 
-    public function putEntry($set, $id, $entityData)
+    public function putEntity($set, $id, $entityData)
     {
-        if (!in_array($set, $this->supportedSets)) {
-            return array();
-        }
-
         $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
         $tableName = $tablePrefix . $set;
 
@@ -106,12 +94,8 @@ class PdoStorage
         return 1 === $stmt->rowCount();
     }
 
-    public function deleteEntry($set, $id)
+    public function deleteEntity($set, $id)
     {
-        if (!in_array($set, $this->supportedSets)) {
-            return array();
-        }
-
         $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
         $tableName = $tablePrefix . $set;
 
@@ -122,12 +106,8 @@ class PdoStorage
         return 1 === $stmt->rowCount();
     }
 
-    public function postEntry($set, $entityData)
+    public function postEntity($set, $entityData)
     {
-        if (!in_array($set, $this->supportedSets)) {
-            return array();
-        }
-
         $tablePrefix = $this->_c->getSectionValue('PdoStorage', 'tablePrefix', FALSE);
         $tableName = $tablePrefix . $set;
 

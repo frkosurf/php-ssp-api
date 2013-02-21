@@ -2,11 +2,11 @@
 
 namespace SspApi;
 
-class ApiException extends \Exception
+class SspApiException extends \Exception
 {
     private $_description;
 
-    public function __construct($message, $description, $code = 0, Exception $previous = null)
+    public function __construct($message, $description, $code = 0, \Exception $previous = null)
     {
         $this->_description = $description;
         parent::__construct($message, $code, $previous);
@@ -26,8 +26,6 @@ class ApiException extends \Exception
                 return 400;
             case "forbidden":
                 return 403;
-            case "method_not_allowed":
-                return 405;
             default:
                 return 400;
         }

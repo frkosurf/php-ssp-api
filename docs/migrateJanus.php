@@ -276,6 +276,7 @@ function fetchMetadata($type, array $result, $entityId)
         // certFingerprint MUST be set
         if (!array_key_exists("certFingerprint", $metadata) || empty($metadata['certFingerprint'])) {
             echo "WARNING: certFingerprint not set for $entityId" . PHP_EOL;
+
             return FALSE;
         }
 
@@ -290,7 +291,7 @@ function fetchMetadata($type, array $result, $entityId)
             if (FALSE === $is || !is_array($is) || count($is) < 2) {
                 echo "WARNING: unable to decode logo for " . $entityId . PHP_EOL;
                 unset($metadata['UIInfo']['Logo']);
-            } else { 
+            } else {
                 list($width, $height) = $is;
 
                 if (!array_key_exists("height", $metadata['UIInfo']['Logo'])) {

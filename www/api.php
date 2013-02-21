@@ -15,7 +15,14 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . "lib" . DIRECTORY_SEPARATOR . "_autoload.php";
+require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . "lib" . DIRECTORY_SEPARATOR . "SplClassLoader.php";
+
+$c1 = new SplClassLoader("RestService", "../extlib/php-rest-service/lib");
+$c1->register();
+$c2 = new SplClassLoader("OAuth", "../extlib/php-lib-remote-rs/lib");
+$c2->register();
+$c3 = new SplClassLoader("SspApi", "../lib");
+$c3->register();
 
 use \RestService\Http\HttpRequest as HttpRequest;
 use \RestService\Http\HttpResponse as HttpResponse;
@@ -23,8 +30,10 @@ use \RestService\Http\IncomingHttpRequest as IncomingHttpRequest;
 use \RestService\Utils\Config as Config;
 use \RestService\Utils\Logger as Logger;
 
-use \SspApi\PdoStorage as PdoStorage;
-use \SspApi\ApiException as ApiException;
+use \SspApi\SspApi as SspApi;
+use \SspApi\SspApiException as SspApiException;
+
+use \OAuth\RemoteResourceServerException as RemoteResourceServerException;
 
 $logger = NULL;
 $request = NULL;
@@ -34,77 +43,58 @@ try {
     $config = new Config(dirname(__DIR__) . DIRECTORY_SEPARATOR . "config" . DIRECTORY_SEPARATOR . "config.ini");
     $logger = new Logger($config->getSectionValue('Log', 'logLevel'), $config->getValue('serviceName'), $config->getSectionValue('Log', 'logFile'), $config->getSectionValue('Log', 'logMail', FALSE));
 
-    $storage = new PdoStorage($config);
+    $service = new SspApi($config, $logger);
 
     $request = HttpRequest::fromIncomingHttpRequest(new IncomingHttpRequest());
 
-    $response = new HttpResponse(200, "application/json");
-
-    $request->matchRest("GET", "/:set/", function($set) use ($storage, $response, $request) {
-        //$rs->requireScope("ssp");
-        //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
-        $searchQuery = $request->getQueryParameter('searchQuery');
-        $response->setContent(json_encode($storage->getEntries($set, $searchQuery)));
+    $request->matchRest("GET", "/:set/", function($set) use ($request, &$response, $service) {
+        $response = $service->getEntities($set, $request);
     });
 
-    $request->matchRest("GET", "/:set/entity", function($set) use ($storage, $response, $request) {
-        //$rs->requireScope("ssp");
-        //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
-        // Apache rewrites URLs to not contain double "//". So we need to restore this... HOW ugly...
-        $id = $request->getQueryParameter("id");
-        if (NULL === $id) {
-           throw new ApiException("not_found", "resource not found");
-        }
-        $response->setContent(json_encode($storage->getEntry($set, $id)));
+    $request->matchRest("GET", "/:set/entity", function($set) use ($request, &$response, $service) {
+        $response = $service->getEntity($set, $request);
     });
 
-    $request->matchRest("DELETE", "/:set/entity", function($set) use ($storage, $response, $request) {
-        //$rs->requireScope("ssp");
-        //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
-        $id = $request->getQueryParameter("id");
-        if (NULL === $id) {
-           throw new ApiException("not_found", "resource not found");
-        }
-        $response->setContent(json_encode($storage->deleteEntry($set, $id)));
+    $request->matchRest("DELETE", "/:set/entity", function($set) use ($request, &$response, $service) {
+        $response = $service->deleteEntity($set, $request);
     });
 
-    $request->matchRest("PUT", "/:set/entity", function($set) use ($storage, $request, $response) {
-        //$rs->requireScope("ssp");
-        //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
-        $id = $request->getQueryParameter("id");
-        if (NULL === $id) {
-           throw new ApiException("not_found", "resource not found");
-        }
-        // FIXME: verify content type
-        $response->setContent(json_encode($storage->putEntry($set, $id, $request->getContent())));
+    $request->matchRest("PUT", "/:set/entity", function($set) use ($request, &$response, $service) {
+        $response = $service->putEntity($set, $request);
     });
 
-    $request->matchRest("POST", "/:set/", function($set) use ($storage, $request, $response) {
-        //$rs->requireScope("ssp");
-        //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
-
-        // FIXME: verify content type
-        $response->setContent(json_encode($storage->postEntry($set, $request->getContent())));
+    $request->matchRest("POST", "/:set/", function($set) use ($request, &$response, $service) {
+        $response = $service->postEntity($set, $request);
     });
 
-    $request->matchRestDefault(function($methodMatch, $patternMatch) use ($request, $response) {
+    $request->matchRestDefault(function($methodMatch, $patternMatch) use ($request) {
         if (in_array($request->getRequestMethod(), $methodMatch)) {
             if (!$patternMatch) {
-                throw new ApiException("not_found", "resource not found");
+                throw new SspApiException("not_found", "resource not found");
             }
         } else {
-            throw new ApiException("method_not_allowed", "request method not allowed");
+            throw new SspApiException("method_not_allowed", "request method not allowed");
         }
     });
 
-} catch (ApiException $e) {
-    $response = new HttpResponse($e->getResponseCode(), "application/json");
-    $response->setContent(json_encode(array("error" => $e->getMessage(), "error_description" => $e->getDescription())));
+} catch (SspApiException $e) {
+    $response = new HttpResponse($e->getResponseCode());
+    $response->setHeader("Content-Type", "application/json");
+    $response->setContent(json_encode(array("error" => $e->getMessage(), "error_description" => $e->getMessage())));
     if (NULL !== $logger) {
         $logger->logFatal($e->getLogMessage(TRUE) . PHP_EOL . $request . PHP_EOL . $response);
     }
+} catch (RemoteResourceServerException $e) {
+    $response = new HttpResponse($e->getResponseCode());
+    $response->setHeader("WWW-Authenticate", $e->getAuthenticateHeader());
+    $response->setHeader("Content-Type", "application/json");
+    $response->setContent($e->getContent());
+    if (NULL !== $logger) {
+        $logger->logWarn($e->getMessage() . PHP_EOL . $e->getDescription() . PHP_EOL . $request . PHP_EOL . $response);
+    }
 } catch (Exception $e) {
-    $response = new HttpResponse(500, "application/json");
+    $response = new HttpResponse(500);
+    $response->setHeader("Content-Type", "application/json");
     $response->setContent(json_encode(array("error" => "internal_server_error", "error_description" => $e->getMessage())));
     if (NULL !== $logger) {
         $logger->logFatal($e->getMessage() . PHP_EOL . $request . PHP_EOL . $response);
