@@ -133,7 +133,7 @@ class PdoStorage
 
         $stmt = $this->_pdo->prepare("INSERT INTO `$tableName` (`entity_id`, `entity_data`) VALUES(:entity_id, :entity_data)");
         $stmt->bindValue(":entity_id", $entityData['entityid'], PDO::PARAM_STR);
-        $stmt->bindValue(":entity_data", $entityData, PDO::PARAM_STR);
+        $stmt->bindValue(":entity_data", json_encode($entityData), PDO::PARAM_STR);
         $stmt->execute();
 
         return 1 === $stmt->rowCount();

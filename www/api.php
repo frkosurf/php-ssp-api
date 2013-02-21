@@ -75,6 +75,7 @@ try {
         if (NULL === $id) {
            throw new ApiException("not_found", "resource not found");
         }
+        // FIXME: verify content type
         $response->setContent(json_encode($storage->putEntry($set, $id, $request->getContent())));
     });
 
@@ -82,6 +83,7 @@ try {
         //$rs->requireScope("ssp");
         //$rs->requireEntitlement("urn:x-oauth:entitlement:ssp");
 
+        // FIXME: verify content type
         $response->setContent(json_encode($storage->postEntry($set, $request->getContent())));
     });
 

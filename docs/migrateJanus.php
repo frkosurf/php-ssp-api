@@ -276,7 +276,6 @@ function fetchMetadata($type, array $result, $entityId)
         // certFingerprint MUST be set
         if (!array_key_exists("certFingerprint", $metadata) || empty($metadata['certFingerprint'])) {
             echo "WARNING: certFingerprint not set for $entityId" . PHP_EOL;
-
             return FALSE;
         }
 
@@ -291,30 +290,29 @@ function fetchMetadata($type, array $result, $entityId)
             if (FALSE === $is || !is_array($is) || count($is) < 2) {
                 echo "WARNING: unable to decode logo for " . $entityId . PHP_EOL;
                 unset($metadata['UIInfo']['Logo']);
-                // FIXME: go to next item...?!
-                //continue;
-            }
-            list($width, $height) = $is;
+            } else { 
+                list($width, $height) = $is;
 
-            if (!array_key_exists("height", $metadata['UIInfo']['Logo'])) {
-                echo "WARNING: logo height not set for " . $entityId . ", is: " . $height . PHP_EOL;
-            } else {
-                if ($height !== $metadata['UIInfo']['Logo']['height']) {
-                    echo "WARNING: logo height does not match actual picture height for " . $entityId . ", is: " . $height . ", specified: " . $metadata['UIInfo']['Logo']['height'] . PHP_EOL;
+                if (!array_key_exists("height", $metadata['UIInfo']['Logo'])) {
+                    echo "WARNING: logo height not set for " . $entityId . ", is: " . $height . PHP_EOL;
+                } else {
+                    if ($height !== $metadata['UIInfo']['Logo']['height']) {
+                        echo "WARNING: logo height does not match actual picture height for " . $entityId . ", is: " . $height . ", specified: " . $metadata['UIInfo']['Logo']['height'] . PHP_EOL;
+                    }
                 }
-            }
-            if (!array_key_exists("width", $metadata['UIInfo']['Logo'])) {
-                echo "WARNING: logo width not set for " . $entityId . ", is: " . $width . PHP_EOL;
-            } else {
-                if ($width !== $metadata['UIInfo']['Logo']['width']) {
-                    echo "WARNING: logo width does not match actual picture width for " . $entityId . ", is: " . $width . ", specified: " . $metadata['UIInfo']['Logo']['width'] . PHP_EOL;
+                if (!array_key_exists("width", $metadata['UIInfo']['Logo'])) {
+                    echo "WARNING: logo width not set for " . $entityId . ", is: " . $width . PHP_EOL;
+                } else {
+                    if ($width !== $metadata['UIInfo']['Logo']['width']) {
+                        echo "WARNING: logo width does not match actual picture width for " . $entityId . ", is: " . $width . ", specified: " . $metadata['UIInfo']['Logo']['width'] . PHP_EOL;
+                    }
                 }
+                // override image size based on actual size of logo anyway
+                $metadata['UIInfo']['Logo']['height'] = $height;
+                $metadata['UIInfo']['Logo']['width'] = $width;
+                // needs to be array, FIXME: make this nice!
+                $metadata['UIInfo']['Logo'] = array($metadata['UIInfo']['Logo']);
             }
-            // override image size based on actual size of logo anyway
-            $metadata['UIInfo']['Logo']['height'] = $height;
-            $metadata['UIInfo']['Logo']['width'] = $width;
-            // needs to be array, FIXME: make this nice!
-            $metadata['UIInfo']['Logo'] = array($metadata['UIInfo']['Logo']);
         }
 
         // keywords
@@ -356,13 +354,12 @@ function fetchMetadata($type, array $result, $entityId)
 
         foreach ($result as $entry) {
             if ($entry['key'] === 'AssertionConsumerService:0:Location') {
-                $metadata['AssertionConsumerService']['Location'] = $entry['value'];
+                $metadata['AssertionConsumerService'] = $entry['value'];
             }
             if ($entry['key'] === 'AssertionConsumerService:0:Binding') {
                 if ("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" !== $entry['value']) {
                     echo "WARNING: " . $entityId . " does not use HTTP-POST binding, but '" . $entry['value'] . "' instead" . PHP_EOL;
                 }
-                $metadata['AssertionConsumerService']['Binding'] = $entry['value'];
             }
             if ($entry['key'] === 'NameIDFormat') {
                 $validNameIDs = array (
@@ -414,13 +411,10 @@ function fetchMetadata($type, array $result, $entityId)
 
             return FALSE;
         }
-        if (!array_key_exists("Location", $metadata['AssertionConsumerService']) || empty($metadata['AssertionConsumerService']['Location'])) {
-            echo "WARNING: AssertionConsumerService Location not set for $entityId" . PHP_EOL;
+        if (empty($metadata['AssertionConsumerService'])) {
+            echo "WARNING: AssertionConsumerService not set for $entityId" . PHP_EOL;
 
             return FALSE;
-        }
-        if (!array_key_exists("Binding", $metadata['AssertionConsumerService']) || empty($metadata['AssertionConsumerService']['Binding'])) {
-            $metadata['AssertionConsumerService']['Binding'] = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST";
         }
         if (!array_key_exists("NameIDFormat", $metadata) || empty($metadata['NameIDFormat'])) {
             $metadata['NameIDFormat'] = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient";
