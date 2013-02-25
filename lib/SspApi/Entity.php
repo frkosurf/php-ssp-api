@@ -1,5 +1,7 @@
 <?php
 
+namespace SspApi;
+
 class Entity
 {
     public static function verify($type, array $entityData)
