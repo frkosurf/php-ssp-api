@@ -4,6 +4,16 @@ namespace SspApi;
 
 class Entity
 {
+
+    public static function verifyJson($type, $entityJson)
+    {
+        $entityData = json_decode($entityJson, TRUE);
+        if (NULL === $entityData) {
+            throw new EntityException("unable to decode data");
+        }
+        self::verify($type, $entityData);
+    }
+
     public static function verify($type, array $entityData)
     {
         if (!in_array($type, array ("saml20-idp-remote", "saml20-sp-remote"))) {

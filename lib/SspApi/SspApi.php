@@ -99,7 +99,7 @@ class SspApi
         }
 
         try {
-            Entity::verify($request->getContent());
+            Entity::verifyJson($request->getContent());
         } catch (EntityException $e) {
             throw new SspApiException("invalid_request", "invalid entity data [" . $e->getMessage() . "]") ;
         }
@@ -119,7 +119,7 @@ class SspApi
         $this->_resourceServer->requireScope("ssp");
 
         try {
-            Entity::verify($request->getContent());
+            Entity::verifyJson($request->getContent());
         } catch (EntityException $e) {
             throw new SspApiException("invalid_request", "invalid entity data [" . $e->getMessage() . "]") ;
         }
