@@ -381,6 +381,12 @@ function fetchMetadata($type, array $result, $entityId)
                 $metadata['NameIDFormat'] = $entry['value'];
             }
 
+            if ($entry['key'] === 'redirect.sign') {
+                if ($entry['value']) {
+                    echo "INFO: require signed AuthnRequest from " . $entityId . PHP_EOL;
+                }
+            }
+
             // contacts
             if (strpos($entry['key'], 'contacts:') === 0) {
                 // determine number
