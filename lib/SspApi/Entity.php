@@ -40,8 +40,18 @@ class Entity
             if (!array_key_exists("SingleSignOnService", $entityData)) {
                 throw new EntityException("missing SingleSignOnService");
             }
-            if (!is_string($entityData["SingleSignOnService"]) || FALSE === filter_var($entityData["SingleSignOnService"], FILTER_VALIDATE_URL)) {
+
+            if (!is_array($entityData["SingleSignOnService"])) {
                 throw new EntityException("invalid SingleSignOnService");
+            }
+
+            foreach ($entityData["SingleSignOnService"] as $sso) {
+                if (!array_key_exists("Location", $sso) || FALSE === filter_var($sso["Location"], FILTER_VALIDATE_URL)) {
+                    throw new EntityException("invalid or missing SingleSignOnService Location");
+                }
+                if (!array_key_exists("Binding", $sso)) {
+                    throw new EntityException("missing SingleSignOnService Binding");
+                }
             }
 
             // certFingerprint checking
@@ -64,8 +74,14 @@ class Entity
             if (!array_key_exists("AssertionConsumerService", $entityData)) {
                 throw new EntityException("missing AssertionConsumerService");
             }
-            if (!is_string($entityData["AssertionConsumerService"]) || FALSE === filter_var($entityData["AssertionConsumerService"], FILTER_VALIDATE_URL)) {
-                throw new EntityException("invalid AssertionConsumerService");
+
+            foreach ($entityData["AssertionConsumerService"] as $sso) {
+                if (!array_key_exists("Location", $sso) || FALSE === filter_var($sso["Location"], FILTER_VALIDATE_URL)) {
+                    throw new EntityException("invalid or missing AssertionConsumerService Location");
+                }
+                if (!array_key_exists("Binding", $sso)) {
+                    throw new EntityException("missing AssertionConsumerService Binding");
+                }
             }
 
         } else {
