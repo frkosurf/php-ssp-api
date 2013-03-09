@@ -51,7 +51,7 @@ foreach ($result as $r) {
         $mdu = NULL;
     }
 
-    $data[$type][$eid]['metadataurl'] = $mdu;
+    $data[$type][$eid]['metadata-url'] = $mdu;
 
     // get ARP if entry is a service provider
     if ("saml20-sp" === $type) {

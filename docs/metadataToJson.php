@@ -42,7 +42,7 @@ if (array_key_exists("keys", $metadata)) {
         }
     }
 }
-$metadata['metadataurl'] = $metadataFile;
+$metadata['metadata-url'] = $metadataFile;
 //echo $metadata['entityid'] . " expires in " . ($metadata['expire'] - time()) . "s" . PHP_EOL;
 echo json_encode($metadata);
 
