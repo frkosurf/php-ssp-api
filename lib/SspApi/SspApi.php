@@ -99,12 +99,12 @@ class SspApi
         }
 
         try {
-            Entity::verifyJson($request->getContent());
+            Entity::verifyJson($set, $request->getContent());
         } catch (EntityException $e) {
             throw new SspApiException("invalid_request", "invalid entity data [" . $e->getMessage() . "]") ;
         }
 
-        if (FALSE === $this->_storage->putEntity($set, $request->getContent())) {
+        if (FALSE === $this->_storage->putEntity($set, $entityId, $request->getContent())) {
             // FIXME: unable to put?!
         }
 
@@ -119,7 +119,7 @@ class SspApi
         $this->_resourceServer->requireScope("ssp");
 
         try {
-            Entity::verifyJson($request->getContent());
+            Entity::verifyJson($set, $request->getContent());
         } catch (EntityException $e) {
             throw new SspApiException("invalid_request", "invalid entity data [" . $e->getMessage() . "]") ;
         }

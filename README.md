@@ -16,3 +16,12 @@ currently be found here: https://code.google.com/p/simplesamlphp/issues/detail?i
 
 In the future also a HTML5 "webapp" will be made available to manage the 
 entries. For now there is just a JSON based REST API.
+
+# Using the API
+To obtain an entry and store it in `sp.json`:
+
+    curl -H "Authorization: Bearer abcdef" http://localhost/frkonext/php-ssp-api/api.php/saml20-sp-remote/entity?id=http://localhost/frkonext/sspsp/module.php/saml/sp/metadata.php/default-sp > sp.json
+
+To update an entry from the file `sp.json`:
+    curl -d @sp.json -X PUT -H "Authorization: Bearer abcdef" http://localhost/frkonext/php-ssp-api/api.php/saml20-sp-remote/entity?id=http://localhost/frkonext/sspsp/module.php/saml/sp/metadata.php/default-sp
+
