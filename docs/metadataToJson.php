@@ -36,8 +36,8 @@ if (array_key_exists("keys", $metadata)) {
             $cert = str_replace("\r", "", $cert);
             $derCert = base64_decode($cert);
             $fingerprint = sha1($derCert);
-            //$metadata['certData'] = array ($cert) ;
-            $metadata['certFingerprint'] = array ( $fingerprint );
+            $metadata['certData'] = array($cert);
+            $metadata['certFingerprint'] = array ($fingerprint);
             unset($metadata['keys']);
         }
     }
