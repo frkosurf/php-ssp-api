@@ -23,5 +23,6 @@ To obtain an entry and store it in `sp.json`:
     curl -H "Authorization: Bearer abcdef" http://localhost/frkonext/php-ssp-api/api.php/saml20-sp-remote/entity?id=http://localhost/frkonext/sspsp/module.php/saml/sp/metadata.php/default-sp > sp.json
 
 To update an entry from the file `sp.json`:
+    
     curl -d @sp.json -X PUT -H "Authorization: Bearer abcdef" http://localhost/frkonext/php-ssp-api/api.php/saml20-sp-remote/entity?id=http://localhost/frkonext/sspsp/module.php/saml/sp/metadata.php/default-sp
 
