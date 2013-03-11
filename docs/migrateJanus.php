@@ -353,6 +353,8 @@ function fetchMetadata($type, array $result, $entityId)
 
         $contacts = array();
 
+        $oauth = array();
+
         foreach ($result as $entry) {
             if ($entry['key'] === 'AssertionConsumerService:0:Location') {
                 $metadata['AssertionConsumerService'] = $entry['value'];
@@ -405,6 +407,19 @@ function fetchMetadata($type, array $result, $entityId)
                 $displayName[$c_lang] = $entry['value'];
             }
 
+            // OAuth related stuff
+            if ("coin:gadgetbaseurl" === $entry['key']) {
+                $oauth['client_id'] = $entry['value'];
+            }
+
+            if ("coin:oauth:secret" === $entry['key']) {
+                $oauth['client_secret'] = $entry['value'];
+            }
+
+            if ("coin:oauth:callback_url" === $entry['key']) {
+                $oauth['client_redirectUri'] = $entry['value'];
+            }
+
         }
 
         cleanupName($entityId, $metadata, $name, $displayName);
@@ -426,6 +441,12 @@ function fetchMetadata($type, array $result, $entityId)
         if (!array_key_exists("NameIDFormat", $metadata) || empty($metadata['NameIDFormat'])) {
             $metadata['NameIDFormat'] = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient";
         }
+
+        // OAuth
+        if (!empty($oauth)) {
+            echo "INFO: OAuth for $entityId: (" . json_encode($oauth) . ")" . PHP_EOL;
+        }
+
     }
 
     return $metadata;
