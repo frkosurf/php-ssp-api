@@ -8,7 +8,7 @@ class Entity
     public static function verifyJson($type, $entityJson)
     {
         $entityData = json_decode($entityJson, TRUE);
-        if (NULL === $entityData) {
+        if (NULL === $entityData || !is_array($entityJson)) {
             throw new EntityException("unable to decode data");
         }
         self::verify($type, $entityData);
@@ -62,18 +62,11 @@ class Entity
                 }
             }
 
-            // certFingerprint checking
-            if (!array_key_exists("certFingerprint", $entityData)) {
-                throw new EntityException("missing certFingerprint");
+            // certificate checking
+            if (!array_key_exists("certFingerprint", $entityData) && !array_key_exists("certData", $entityData)) {
+                throw new EntityException("missing certificate and certificate fingerprint");
             }
-            if (!is_array($entityData["certFingerprint"])) {
-                throw new EntityException("certFingerprint needs to be an array");
-            }
-            foreach ($entityData["certFingerprint"] as $fp) {
-                if (empty($fp)) {
-                    throw new EntityException("certFingerprint needs to contain certificate fingerprints");
-                }
-            }
+            // FIXME: more certificate checking is needed! can also be in "keys" section...
 
         } elseif ("saml20-sp-remote" === $type) {
             // SP specific validation
@@ -87,6 +80,7 @@ class Entity
             }
 
             foreach ($entityData["AssertionConsumerService"] as $acs) {
+                // index is also allowed and should probably be checked
                 if (!is_array($acs)) {
                     throw new EntityException("invalid AssertionConsumerService entry");
                 }

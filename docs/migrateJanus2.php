@@ -1,9 +1,9 @@
 <?php
 
 if ($argc < 2) {
-    die("specify the file to write the JSON data to" . PHP_EOL);
+    die("specify the directory to write the JSON data to" . PHP_EOL);
 }
-$fileName = $argv[1];
+$dirName = $argv[1];
 
 $data = array();
 
@@ -116,9 +116,20 @@ EOF;
 echo count($saml20_idp) . " IdPs" . PHP_EOL;
 echo count($saml20_sp) . " SPs" . PHP_EOL;
 
-findAclConflict($saml20_idp, $saml20_sp);
+findAclConflicts($saml20_idp, $saml20_sp);
+moveAclToSP($saml20_idp, $saml20_sp);
 
-file_put_contents($argv[1], json_encode(array_values($saml20_idp) + array_values($saml20_sp)));
+convertToUIInfo($saml20_idp);
+convertToUIInfo($saml20_sp);
+
+filterKeywords($saml20_idp);
+
+if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", json_encode(array_values($saml20_idp)))) {
+    throw new Exception("unable to write 'saml20-idp-remote.json'");
+}
+if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-sp-remote.json", json_encode(array_values($saml20_sp)))) {
+    throw new Exception("unable to write 'saml20-sp-remote.json'");
+}
 
 function arrayizeMetadata(&$metadata)
 {
@@ -147,18 +158,8 @@ function arrayizeMetadata(&$metadata)
     }
 }
 
-function findAclConflict(&$idp, &$sp)
+function findAclConflicts(&$idp, &$sp)
 {
-
-    // for every SP where allowAll = FALSE
-    //      for every IdP in the IDPList:
-    //          check if IdP exists
-    //              NO : print error + next IdP
-    //              YES: check whether IdP has this SP in its SPList
-    //                  NO : print error + next IdP
-    //                  YES: next IdP
-    //
-    //
     foreach ($sp as $eid => $metadata) {
         if (!$metadata['allowAll']) {
             echo "[ERROR  ] SP '" . $eid . "' does not have 'Allow All' set" . PHP_EOL;
@@ -175,18 +176,6 @@ function findAclConflict(&$idp, &$sp)
         }
     }
 
-    // for every IdP
-    //     has allowAll = TRUE:
-    //          YES:
-    //              ....
-    //          NO:
-    //               for every IdP with an SPList
-    //                  check if the SP has an ACL
-    //                      YES: check if this IdP is in the list
-    //                          YES: OK
-    //                          NO: print error (SP does not list IdP)
-    //                      NO: continue next SP
-    //
     foreach ($idp as $eid => $metadata) {
         echo "[INFO] IdP '" . $eid . "'" . PHP_EOL;
         if ($metadata['allowAll']) {
@@ -203,6 +192,96 @@ function findAclConflict(&$idp, &$sp)
             }
             if (!in_array($eid, $sp[$s]['IDPList'])) {
                 echo "\t[WARNING] SP '" . $s . "' does not have IdP '" . $eid . "' in its ACL" . PHP_EOL;
+            }
+        }
+    }
+}
+
+function convertToUIInfo(&$entities)
+{
+    // some keys belong in UIInfo (under a different name)
+    foreach ($entities as $eid => $metadata) {
+        $entities[$eid]['UIInfo'] = array();
+        if (array_key_exists("displayName", $metadata)) {
+            $entities[$eid]['UIInfo']['DisplayName'] = $metadata['displayName'];
+            unset($entities[$eid]['displayName']);
+        }
+        if (array_key_exists("keywords", $metadata)) {
+            foreach ($metadata['keywords'] as $lang => $keywords) {
+                $entities[$eid]['UIInfo']['Keywords'][$lang] = explode(" ", $keywords);
+            }
+            unset($entities[$eid]['keywords']);
+        }
+        if (array_key_exists("logo", $metadata)) {
+            if (!array_key_exists("url", $metadata["logo"][0])) {
+                echo "[WARNING] Logo URL missing for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
+            } else {
+                $entities[$eid]['UIInfo']['Logo']["url"] = $metadata["logo"][0]["url"];
+            }
+            if (!array_key_exists("width", $metadata["logo"][0])) {
+                echo "[WARNING] Logo width missing for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
+            } else {
+                $entities[$eid]['UIInfo']['Logo']["width"] = (int) $metadata["logo"][0]["width"];
+            }
+            if (!array_key_exists("height", $metadata["logo"][0])) {
+                echo "[WARNING] Logo height missing for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
+            } else {
+                $entities[$eid]['UIInfo']['Logo']["height"] = (int) $metadata["logo"][0]["height"];
+            }
+            unset($entities[$eid]['logo']);
+        }
+    }
+}
+
+function moveAclToSP(&$idp, &$sp)
+{
+    // remove the ACL from all SPs
+    foreach ($sp as $eid => $metadata) {
+        $sp[$eid]["IDPList"] = array();
+    }
+
+    // for every IdP take the ACL and add its eid to the SP "IDPList" in the ACL list
+    foreach ($idp as $eid => $metadata) {
+        foreach ($metadata['SPList'] as $s) {
+            if (!array_key_exists($s, $sp)) {
+                echo "[WARNING] SP '" . $s . "' does not exist" . PHP_EOL;
+                continue;
+            }
+            array_push($sp[$s]["IDPList"], $eid);
+        }
+        // remove the ACL from the IdP
+        unset($idp[$eid]['SPList']);
+    }
+}
+
+function filterKeywords(&$entities)
+{
+    foreach ($entities as $eid => $metadata) {
+        if (array_key_exists("Keywords", $metadata)) {
+            // remove empty keywords and keywords that contains a "+" symbol or need html encoding
+            foreach ($metadata['Keywords'] as $language => $keywords) {
+                $keywords = array_filter($keywords, function($v) use ($entityId) {
+                    if (empty($v)) {
+                        echo "WARNING: empty keyword for '" . $eid . "'" . PHP_EOL;
+
+                        return FALSE;
+                    }
+                    if (strpos($v, "+") !== FALSE) {
+                        echo "WARNING: keyword contains '+' for '" . $eid . "'" . PHP_EOL;
+
+                        return FALSE;
+                    }
+                    if (htmlentities($v) !== $v) {
+                        echo "WARNING: keyword '" . $v . "' contains special characters for '" . $eid . "'" . PHP_EOL;
+
+                        return FALSE;
+                    }
+
+                    return TRUE;
+                });
+                sort($keywords);
+                $keywords = array_values(array_unique($keywords));
+                $entities[$eid]['Keywords'][$language] = $keywords;
             }
         }
     }
