@@ -205,13 +205,22 @@ function fetchMetadata($type, array $result, $entityId)
         $contacts = array();
 
         $metadata['certFingerprint'] = array();
+        $metadata['SingleSignOnService'] = array();
+        $metadata['SingleLogoutService'] = array();
 
         foreach ($result as $entry) {
             if ($entry['key'] === 'SingleSignOnService:0:Location') {
-                $metadata['SingleSignOnService'] = $entry['value'];
+                $metadata['SingleSignOnService'][0]['Location'] = $entry['value'];
             }
             if ($entry['key'] === 'SingleLogoutService:0:Location') {
-                $metadata['SingleLogoutService'] = $entry['value'];
+                $metadata['SingleLogoutService'][0]['Location'] = $entry['value'];
+            }
+
+            if ($entry['key'] === 'SingleSignOnService:0:Binding') {
+                $metadata['SingleSignOnService'][0]['Binding'] = $entry['value'];
+            }
+            if ($entry['key'] === 'SingleLogoutService:0:Binding') {
+                $metadata['SingleLogoutService'][0]['Binding'] = $entry['value'];
             }
 
             // logo
@@ -355,13 +364,17 @@ function fetchMetadata($type, array $result, $entityId)
 
         $oauth = array();
 
+        $metadata['AssertionConsumerService'] = array();
+
         foreach ($result as $entry) {
             if ($entry['key'] === 'AssertionConsumerService:0:Location') {
-                $metadata['AssertionConsumerService'] = $entry['value'];
+                $metadata['AssertionConsumerService'][0]['Location'] = $entry['value'];
             }
             if ($entry['key'] === 'AssertionConsumerService:0:Binding') {
                 if ("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" !== $entry['value']) {
                     echo "WARNING: " . $entityId . " does not use HTTP-POST binding, but '" . $entry['value'] . "' instead" . PHP_EOL;
+                } else {
+                    $metadata['AssertionConsumerService'][0]['Binding'] = $entry['value'];
                 }
             }
             if ($entry['key'] === 'NameIDFormat') {

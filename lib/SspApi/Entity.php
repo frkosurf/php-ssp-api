@@ -40,17 +40,25 @@ class Entity
             if (!array_key_exists("SingleSignOnService", $entityData)) {
                 throw new EntityException("missing SingleSignOnService");
             }
-
             if (!is_array($entityData["SingleSignOnService"])) {
                 throw new EntityException("invalid SingleSignOnService");
             }
 
             foreach ($entityData["SingleSignOnService"] as $sso) {
-                if (!array_key_exists("Location", $sso) || FALSE === filter_var($sso["Location"], FILTER_VALIDATE_URL)) {
-                    throw new EntityException("invalid or missing SingleSignOnService Location");
+                if (!is_array($sso)) {
+                    throw new EntityException("invalid SingleSignOnService entry");
+                }
+                if (!array_key_exists("Location", $sso)) {
+                    throw new EntityException("missing SingleSignOnService Location");
+                }
+                if (FALSE === filter_var($sso["Location"], FILTER_VALIDATE_URL)) {
+                    throw new EntityException("invalid SingleSignOnService Location");
                 }
                 if (!array_key_exists("Binding", $sso)) {
                     throw new EntityException("missing SingleSignOnService Binding");
+                }
+                if ("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" !== $sso['Binding']) {
+                    throw new EntityException("unsupported SingleSignOnService Binding");
                 }
             }
 
@@ -74,13 +82,28 @@ class Entity
             if (!array_key_exists("AssertionConsumerService", $entityData)) {
                 throw new EntityException("missing AssertionConsumerService");
             }
+            if (!is_array($entityData["AssertionConsumerService"])) {
+                throw new EntityException("invalid AssertionConsumerService");
+            }
 
-            foreach ($entityData["AssertionConsumerService"] as $sso) {
-                if (!array_key_exists("Location", $sso) || FALSE === filter_var($sso["Location"], FILTER_VALIDATE_URL)) {
-                    throw new EntityException("invalid or missing AssertionConsumerService Location");
+            foreach ($entityData["AssertionConsumerService"] as $acs) {
+                if (!is_array($acs)) {
+                    throw new EntityException("invalid AssertionConsumerService entry");
                 }
-                if (!array_key_exists("Binding", $sso)) {
+                // location
+                if (!array_key_exists("Location", $acs)) {
+                    throw new EntityException("missing AssertionConsumerService Location");
+                }
+                if (FALSE === filter_var($acs["Location"], FILTER_VALIDATE_URL)) {
+                    throw new EntityException("invalid AssertionConsumerService Location");
+                }
+
+                // binding
+                if (!array_key_exists("Binding", $acs)) {
                     throw new EntityException("missing AssertionConsumerService Binding");
+                }
+                if ("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" !== $acs['Binding']) {
+                    throw new EntityException("unsupported AssertionConsumerService Binding");
                 }
             }
 

@@ -12,11 +12,11 @@ $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
 $sql = <<< EOF
     SELECT
-        metadataurl, arp, eid, type, entityid, state, revisionid
+        metadataurl, arp, eid, type, allowedall, entityid, state, revisionid
     FROM
         janus__entity e
     WHERE
-        revisionid = (SELECT
+        active = "yes" AND state = "prodaccepted" AND revisionid = (SELECT
                 MAX(revisionid)
             FROM
                 janus__entity
@@ -28,9 +28,8 @@ $sth = $pdo->prepare($sql);
 $sth->execute();
 $result = $sth->fetchAll(PDO::FETCH_ASSOC);
 
-$entities = array();
-$idpCount = 0;
-$spCount = 0;
+$saml20_idp = array();
+$saml20_sp = array();
 
 // for every entry fetch the metadata
 foreach ($result as $r) {
@@ -94,6 +93,8 @@ EOF;
     $sth->execute();
     $a = $sth->fetchAll(PDO::FETCH_COLUMN);
 
+    $metadata['allowAll'] = "yes" === $r['allowedall'];
+
     $metadata['entityid'] = $r['entityid'];
     if (!empty($r['metadataurl'])) {
         $metadata['metadata-url'] = $r['metadataurl'];
@@ -103,26 +104,21 @@ EOF;
 
     if ($metadata['metadata-set'] === "saml20-sp-remote") {
         $metadata['IDPList'] = $a;
-        $spCount++;
-        array_push($entities, $metadata);
+        $saml20_sp[$r['entityid']] = $metadata;
     } elseif ($metadata['metadata-set'] === "saml20-idp-remote") {
         $metadata['SPList'] = $a;
-        $idpCount++;
-        array_push($entities, $metadata);
+        $saml20_idp[$r['entityid']] = $metadata;
     } else {
         throw new Exception("unsupported entity type");
     }
 }
 
-echo $idpCount . " IdPs" . PHP_EOL;
-echo $spCount . " SPs" . PHP_EOL;
+echo count($saml20_idp) . " IdPs" . PHP_EOL;
+echo count($saml20_sp) . " SPs" . PHP_EOL;
 
-$idpWithACL = findIdPWithACL($entities);
-$spWithACL = findSPWithACL($entities);
+findAclConflict($saml20_idp, $saml20_sp);
 
-findConflictingACL($idpWithACL, $spWithACL);
-
-file_put_contents($argv[1], json_encode($entities));
+file_put_contents($argv[1], json_encode(array_values($saml20_idp) + array_values($saml20_sp)));
 
 function arrayizeMetadata(&$metadata)
 {
@@ -151,46 +147,62 @@ function arrayizeMetadata(&$metadata)
     }
 }
 
-function findIdPWithACL(&$entities)
+function findAclConflict(&$idp, &$sp)
 {
-    $idpWithACL = array();
-    foreach ($entities as $e) {
-        if (array_key_exists("SPList", $e) && 0 !== count($e['SPList'])) {
-            $idpWithACL[$e['entityid']] = $e['SPList'];
-        }
-    }
 
-    return $idpWithACL;
-}
-
-function findSPWithACL(&$entities)
-{
-    $spWithACL = array();
-    foreach ($entities as $e) {
-        if (array_key_exists("IDPList", $e) && 0 !== count($e['IDPList'])) {
-            $spWithACL[$e['entityid']] = $e['IDPList'];
-        }
-    }
-
-    return $spWithACL;
-}
-
-function findConflictingACL(&$idpWithACL, &$spWithACL)
-{
-    // the ACL at the SP MUST match with the ACL at the IdP
+    // for every SP where allowAll = FALSE
+    //      for every IdP in the IDPList:
+    //          check if IdP exists
+    //              NO : print error + next IdP
+    //              YES: check whether IdP has this SP in its SPList
+    //                  NO : print error + next IdP
+    //                  YES: next IdP
     //
-    // if there is an ACL at the SP:
-    // 1. the IdP entities mentioned MUST have this SP entityId in the SPList
-    // 2. the other IdP entities MUST NOT have this SP entityId in the SPList
+    //
+    foreach ($sp as $eid => $metadata) {
+        if (!$metadata['allowAll']) {
+            echo "[ERROR  ] SP '" . $eid . "' does not have 'Allow All' set" . PHP_EOL;
+            foreach ($metadata['IDPList'] as $i) {
+                if (!array_key_exists($i, $idp)) {
+                    echo "\t[WARNING] IdP '" . $i . "' listed for SP '" . $eid . "' does not exist" . PHP_EOL;
+                    continue;
+                }
+                if (!in_array($eid, $idp[$i]['SPList'])) {
+                    echo "\t[WARNING] IdP '" . $i . "' does not have SP '" . $eid . "' in its ACL" . PHP_EOL;
+                    continue;
+                }
+            }
+        }
+    }
 
-    foreach ($spWithACL as $eid => $list) {
-        foreach ($list as $l) {
-            if (!array_key_exists($l, $idpWithACL)) {
-                echo "[WARNING] mentioned IdP '" . $l . "' at SP '" . $eid . "' does not exist, or has no ACL" . PHP_EOL;
+    // for every IdP
+    //     has allowAll = TRUE:
+    //          YES:
+    //              ....
+    //          NO:
+    //               for every IdP with an SPList
+    //                  check if the SP has an ACL
+    //                      YES: check if this IdP is in the list
+    //                          YES: OK
+    //                          NO: print error (SP does not list IdP)
+    //                      NO: continue next SP
+    //
+    foreach ($idp as $eid => $metadata) {
+        echo "[INFO] IdP '" . $eid . "'" . PHP_EOL;
+        if ($metadata['allowAll']) {
+            echo "[ERROR  ] IdP '" . $eid . "' has 'Allow All' set" . PHP_EOL;
+            continue;
+        }
+        foreach ($metadata['SPList'] as $s) {
+            if (!array_key_exists($s, $sp)) {
+                echo "\t[WARNING] SP '" . $s . "' listed for IdP '" . $eid . "' does not exist" . PHP_EOL;
                 continue;
             }
-            if (!in_array($eid, $idpWithACL[$l])) {
-                echo "[ERROR]   the mentioned IdP '" . $l . "' at SP '" . $eid . "' is not in the IdP ACL" . PHP_EOL;
+            if ($sp[$s]['allowAll']) {
+                continue;
+            }
+            if (!in_array($eid, $sp[$s]['IDPList'])) {
+                echo "\t[WARNING] SP '" . $s . "' does not have IdP '" . $eid . "' in its ACL" . PHP_EOL;
             }
         }
     }
