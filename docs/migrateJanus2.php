@@ -122,7 +122,8 @@ moveAclToSP($saml20_idp, $saml20_sp);
 convertToUIInfo($saml20_idp);
 convertToUIInfo($saml20_sp);
 
-filterKeywords($saml20_idp);
+validateContacts($saml20_idp);
+validateContacts($saml20_sp);
 
 if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", json_encode(array_values($saml20_idp)))) {
     throw new Exception("unable to write 'saml20-idp-remote.json'");
@@ -197,6 +198,23 @@ function findAclConflicts(&$idp, &$sp)
     }
 }
 
+function validateContacts(&$entities)
+{
+    foreach ($entities as $eid => $metadata) {
+        if (array_key_exists("contacts", $metadata)) {
+            foreach ($metadata['contacts'] as $k => $v) {
+                $filteredContact = filterContact($v);
+                if (FALSE !== $filteredContact) {
+                    $entities[$eid]["contacts"][$k] = $filteredContact;
+                } else {
+                    unset($entities[$eid]["contacts"][$k]);
+                }
+            }
+            $entities[$eid]['contacts'] = array_values($entities[$eid]['contacts']);
+        }
+    }
+}
+
 function convertToUIInfo(&$entities)
 {
     // some keys belong in UIInfo (under a different name)
@@ -207,30 +225,39 @@ function convertToUIInfo(&$entities)
             unset($entities[$eid]['displayName']);
         }
         if (array_key_exists("keywords", $metadata)) {
-            foreach ($metadata['keywords'] as $lang => $keywords) {
-                $entities[$eid]['UIInfo']['Keywords'][$lang] = explode(" ", $keywords);
+            foreach ($metadata['keywords'] as $language => $keywords) {
+                $filteredKeywords = filterKeywords($keywords);
+                if (0 !== count($filteredKeywords)) {
+                    $entities[$eid]['UIInfo']['Keywords'][$language] = $filteredKeywords;
+                }
             }
             unset($entities[$eid]['keywords']);
         }
         if (array_key_exists("logo", $metadata)) {
-            if (!array_key_exists("url", $metadata["logo"][0])) {
-                echo "[WARNING] Logo URL missing for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
+            $logo = validateLogo($metadata["logo"][0]);
+            if (FALSE !== $logo) {
+                $entities[$eid]['UIInfo']['Logo'] = $logo;
             } else {
-                $entities[$eid]['UIInfo']['Logo']["url"] = $metadata["logo"][0]["url"];
-            }
-            if (!array_key_exists("width", $metadata["logo"][0])) {
-                echo "[WARNING] Logo width missing for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
-            } else {
-                $entities[$eid]['UIInfo']['Logo']["width"] = (int) $metadata["logo"][0]["width"];
-            }
-            if (!array_key_exists("height", $metadata["logo"][0])) {
-                echo "[WARNING] Logo height missing for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
-            } else {
-                $entities[$eid]['UIInfo']['Logo']["height"] = (int) $metadata["logo"][0]["height"];
+                echo "[WARNING] Logo configuration invalid for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
             }
             unset($entities[$eid]['logo']);
         }
     }
+}
+
+function validateLogo(array $logo)
+{
+    if (!array_key_exists("url", $logo)) {
+        return FALSE;
+    }
+    if (!array_key_exists("width", $logo)) {
+        return FALSE;
+    }
+    if (!array_key_exists("height", $logo)) {
+        return FALSE;
+    }
+
+    return array ("url" => $logo['url'], "width" => (int) $logo['width'], "height" => (int) $logo['height']);
 }
 
 function moveAclToSP(&$idp, &$sp)
@@ -254,35 +281,48 @@ function moveAclToSP(&$idp, &$sp)
     }
 }
 
-function filterKeywords(&$entities)
+function filterKeywords($keywords)
 {
-    foreach ($entities as $eid => $metadata) {
-        if (array_key_exists("Keywords", $metadata)) {
-            // remove empty keywords and keywords that contains a "+" symbol or need html encoding
-            foreach ($metadata['Keywords'] as $language => $keywords) {
-                $keywords = array_filter($keywords, function($v) use ($entityId) {
-                    if (empty($v)) {
-                        echo "WARNING: empty keyword for '" . $eid . "'" . PHP_EOL;
-
-                        return FALSE;
-                    }
-                    if (strpos($v, "+") !== FALSE) {
-                        echo "WARNING: keyword contains '+' for '" . $eid . "'" . PHP_EOL;
-
-                        return FALSE;
-                    }
-                    if (htmlentities($v) !== $v) {
-                        echo "WARNING: keyword '" . $v . "' contains special characters for '" . $eid . "'" . PHP_EOL;
-
-                        return FALSE;
-                    }
-
-                    return TRUE;
-                });
-                sort($keywords);
-                $keywords = array_values(array_unique($keywords));
-                $entities[$eid]['Keywords'][$language] = $keywords;
+    $keywordsArray = explode(" ", $keywords);
+    foreach ($keywordsArray as $k) {
+        $keywordsArray = array_filter($keywordsArray, function($v) {
+            if (empty($v)) {
+                return FALSE;
             }
-        }
+            if (strpos($v, "+") !== FALSE) {
+                return FALSE;
+            }
+            if (htmlentities($v) !== $v) {
+                return FALSE;
+            }
+
+            return TRUE;
+        });
     }
+    sort($keywordsArray);
+
+    return array_values(array_unique($keywordsArray));
+}
+
+function filterContact(array $contact)
+{
+    $validContactTypes = array ("technical", "administrative", "support");
+    if (!array_key_exists("contactType", $contact)) {
+        return FALSE;
+    }
+    if (!in_array($contact['contactType'], $validContactTypes)) {
+        return FALSE;
+    }
+    if (!array_key_exists("emailAddress", $contact)) {
+        return FALSE;
+    }
+    $c = array("contactType" => $contact['contactType'], "emailAddress" => $contact['emailAddress']);
+    if (array_key_exists("givenName", $contact) && !empty($contact['givenName'])) {
+        $c['givenName'] = $contact['givenName'];
+    }
+    if (array_key_exists("surName", $contact) && !empty($contact['surName'])) {
+        $c['surName'] = $contact['surName'];
+    }
+
+    return $c;
 }
