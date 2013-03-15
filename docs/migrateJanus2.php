@@ -125,6 +125,9 @@ convertToUIInfo($saml20_sp);
 validateContacts($saml20_idp);
 validateContacts($saml20_sp);
 
+validateEndpoints($saml20_idp);
+validateEndpoints($saml20_sp);
+
 if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", json_encode(array_values($saml20_idp)))) {
     throw new Exception("unable to write 'saml20-idp-remote.json'");
 }
@@ -215,20 +218,42 @@ function validateContacts(&$entities)
     }
 }
 
+function validateEndpoints(&$entities)
+{
+    $endpointTypes = array("SingleLogoutService", "SingleSignOnService", "AssertionConsumerService");
+
+    foreach ($entities as $eid => $metadata) {
+        foreach ($endpointTypes as $type) {
+            if (array_key_exists($type, $metadata)) {
+                foreach ($metadata[$type] as $k => $v) {
+                    $filteredEndpoint = filterEndpoint($v);
+                    if (FALSE !== $filteredEndpoint) {
+                        $entities[$eid][$type][$k] = $filteredEndpoint;
+                    } else {
+                        unset($entities[$eid][$type][$k]);
+                    }
+                }
+                $entities[$eid][$type] = array_values($entities[$eid][$type]);
+            }
+        }
+    }
+}
+
 function convertToUIInfo(&$entities)
 {
     // some keys belong in UIInfo (under a different name)
     foreach ($entities as $eid => $metadata) {
-        $entities[$eid]['UIInfo'] = array();
+        $uiInfo = array();
+
         if (array_key_exists("displayName", $metadata)) {
-            $entities[$eid]['UIInfo']['DisplayName'] = $metadata['displayName'];
+            $uiInfo['DisplayName'] = $metadata['displayName'];
             unset($entities[$eid]['displayName']);
         }
         if (array_key_exists("keywords", $metadata)) {
             foreach ($metadata['keywords'] as $language => $keywords) {
                 $filteredKeywords = filterKeywords($keywords);
                 if (0 !== count($filteredKeywords)) {
-                    $entities[$eid]['UIInfo']['Keywords'][$language] = $filteredKeywords;
+                    $uiInfo['Keywords'][$language] = $filteredKeywords;
                 }
             }
             unset($entities[$eid]['keywords']);
@@ -236,11 +261,14 @@ function convertToUIInfo(&$entities)
         if (array_key_exists("logo", $metadata)) {
             $logo = validateLogo($metadata["logo"][0]);
             if (FALSE !== $logo) {
-                $entities[$eid]['UIInfo']['Logo'] = $logo;
+                $uiInfo['Logo'] = $logo;
             } else {
                 echo "[WARNING] Logo configuration invalid for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
             }
             unset($entities[$eid]['logo']);
+        }
+        if (0 !== count($uiInfo)) {
+            $entities[$eid]['UIInfo'] = $uiInfo;
         }
     }
 }
@@ -325,4 +353,21 @@ function filterContact(array $contact)
     }
 
     return $c;
+}
+
+function filterEndpoint(array $ep)
+{
+    // an ACS, SSO or SLO should have a "Binding" and a "Location" field
+    if (!array_key_exists("Location", $ep)) {
+        return FALSE;
+    }
+    if (!array_key_exists("Binding", $ep)) {
+        return FALSE;
+    }
+    $validatedEndpoint = array("Location" => $ep['Location'], "Binding" => $ep['Binding']);
+    if (array_key_exists("Index", $ep) && !empty($ep['Index'])) {
+        $validatedEndpoint['Index'] = $ep['Index'];
+    }
+
+    return $validatedEndpoint;
 }
