@@ -261,7 +261,7 @@ function convertToUIInfo(&$entities)
         if (array_key_exists("logo", $metadata)) {
             $logo = validateLogo($metadata["logo"][0]);
             if (FALSE !== $logo) {
-                $uiInfo['Logo'] = $logo;
+                $uiInfo['Logo'] = array($logo);
             } else {
                 echo "[WARNING] Logo configuration invalid for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
             }
