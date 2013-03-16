@@ -16,7 +16,7 @@ $sql = <<< EOF
     FROM
         janus__entity e
     WHERE
-        active = "yes" AND state = "prodaccepted" AND revisionid = (SELECT
+        active = "yes" AND revisionid = (SELECT
                 MAX(revisionid)
             FROM
                 janus__entity
