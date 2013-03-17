@@ -8,7 +8,7 @@ class Entity
     public static function verifyJson($type, $entityJson)
     {
         $entityData = json_decode($entityJson, TRUE);
-        if (NULL === $entityData || !is_array($entityJson)) {
+        if (NULL === $entityData || !is_array($entityData)) {
             throw new EntityException("unable to decode data");
         }
         self::verify($type, $entityData);
