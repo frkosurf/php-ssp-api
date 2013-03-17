@@ -16,13 +16,26 @@ class Entity
 
     public static function verify($type, array $entityData)
     {
+        $samlBindings = array (
+            "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact",
+            "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+            "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
+            "urn:oasis:names:tc:SAML:2.0:bindings:PAOS",
+            "urn:oasis:names:tc:SAML:2.0:bindings:SOAP"
+        );
+
         if (!in_array($type, array ("saml20-idp-remote", "saml20-sp-remote"))) {
             throw new EntityException("unsupported type");
         }
 
-        // we need to have an entityid entry
-        if (!array_key_exists("entityid", $entityData)) {
+        // we need to have a non-empty entityid entry
+        if (!array_key_exists("entityid", $entityData) || empty($entityData['entityid'])) {
             throw new EntityException("missing entityid");
+        }
+
+        // no whitespace allowed at beginning or end of entityid
+        if (trim($entityData['entityid']) !== $entityData['entityid']) {
+            throw new EntityException("invalid entityid, no whitespace allowed at beginning or end");
         }
 
         // we need to have a name with at least an english language entry
@@ -57,8 +70,8 @@ class Entity
                 if (!array_key_exists("Binding", $sso)) {
                     throw new EntityException("missing SingleSignOnService Binding");
                 }
-                if ("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" !== $sso['Binding']) {
-                    throw new EntityException("unsupported SingleSignOnService Binding");
+                if (!in_array($sso['Binding'], $samlBindings)) {
+                    throw new EntityException("unsupported SingleSignOnService Binding '" . $sso['Binding'] . "'");
                 }
             }
 
@@ -96,8 +109,8 @@ class Entity
                 if (!array_key_exists("Binding", $acs)) {
                     throw new EntityException("missing AssertionConsumerService Binding");
                 }
-                if ("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" !== $acs['Binding']) {
-                    throw new EntityException("unsupported AssertionConsumerService Binding");
+                if (!in_array($acs['Binding'], $samlBindings)) {
+                    throw new EntityException("unsupported AssertionConsumerService Binding '" . $acs['Binding'] . "'");
                 }
             }
 
