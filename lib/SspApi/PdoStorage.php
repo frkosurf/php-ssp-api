@@ -78,7 +78,7 @@ class PdoStorage
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
         // if entity was not found, return FALSE
-        return 1 === count($data) ? json_decode($data['entity_data'], TRUE) : FALSE;
+        return (FALSE !== $data && 1 === count($data)) ? json_decode($data['entity_data'], TRUE) : FALSE;
     }
 
     public function putEntity($set, $id, $entityData)
