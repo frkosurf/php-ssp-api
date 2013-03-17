@@ -27,6 +27,7 @@ foreach (glob($pathToMetadata . "/*.json") as $filename) {
             Entity::verify($set, $m);
         } catch (EntityException $e) {
             echo "ERROR [verify]: " . $e->getMessage() . PHP_EOL;
+            continue;
         }
 
         try {
