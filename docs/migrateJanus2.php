@@ -30,6 +30,7 @@ $result = $sth->fetchAll(PDO::FETCH_ASSOC);
 
 $saml20_idp = array();
 $saml20_sp = array();
+$allAttributes = array();
 
 // for every entry fetch the metadata
 foreach ($result as $r) {
@@ -65,6 +66,8 @@ EOF;
         $arpResult = $sth->fetch(PDO::FETCH_ASSOC);
         if (NULL !== $arpResult['attributes']) {
             $metadata['attributes'] = array_keys(unserialize($arpResult['attributes']));
+            $allAttributes += $metadata['attributes'];
+            $allAttributes = array_unique($allAttributes);
         } else {
             $metadata['attributes'] = array();
         }
@@ -136,6 +139,11 @@ if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-re
 }
 if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-sp-remote.json", json_encode(array_values($saml20_sp)))) {
     throw new Exception("unable to write 'saml20-sp-remote.json'");
+}
+
+sort($allAttributes);
+if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "allAttributes.json", json_encode(array_values($allAttributes)))) {
+    throw new Exception("unable to write 'allAttributes.json'");
 }
 
 function arrayizeMetadata(&$metadata)
