@@ -56,6 +56,9 @@ class Entity
             if (!is_array($entityData["SingleSignOnService"])) {
                 throw new EntityException("invalid SingleSignOnService");
             }
+            if (0 === count($entityData["SingleSignOnService"])) {
+                throw new EntityException("no SingleSignOnService endpoints");
+            }
 
             foreach ($entityData["SingleSignOnService"] as $sso) {
                 if (!is_array($sso)) {
@@ -90,6 +93,9 @@ class Entity
             }
             if (!is_array($entityData["AssertionConsumerService"])) {
                 throw new EntityException("invalid AssertionConsumerService");
+            }
+            if (0 === count($entityData["AssertionConsumerService"])) {
+                throw new EntityException("no AssertionConsumerService endpoints");
             }
 
             foreach ($entityData["AssertionConsumerService"] as $acs) {
