@@ -80,7 +80,7 @@ try {
 } catch (SspApiException $e) {
     $response = new HttpResponse($e->getResponseCode());
     $response->setHeader("Content-Type", "application/json");
-    $response->setContent(json_encode(array("error" => $e->getMessage(), "error_description" => $e->getMessage())));
+    $response->setContent(json_encode(array("error" => $e->getMessage(), "error_description" => $e->getDescription())));
     if (NULL !== $logger) {
         $logger->logFatal($e->getLogMessage(TRUE) . PHP_EOL . $request . PHP_EOL . $response);
     }
@@ -88,7 +88,7 @@ try {
     $response = new HttpResponse($e->getResponseCode());
     $response->setHeader("WWW-Authenticate", $e->getAuthenticateHeader());
     $response->setHeader("Content-Type", "application/json");
-    $response->setContent($e->getContent());
+    $response->setContent(json_encode(array("error" => $e->getMessage(), "error_description" => $e->getDescription())));
     if (NULL !== $logger) {
         $logger->logWarn($e->getMessage() . PHP_EOL . $e->getDescription() . PHP_EOL . $request . PHP_EOL . $response);
     }
