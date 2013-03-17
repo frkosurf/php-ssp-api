@@ -281,10 +281,13 @@ function validateLogo(array $logo)
     if (!array_key_exists("url", $logo)) {
         return FALSE;
     }
-    if (!array_key_exists("width", $logo)) {
+    if (FALSE === filter_var($logo['url'], FILTER_VALIDATE_URL, FILTER_FLAG_PATH_REQUIRED)) {
         return FALSE;
     }
-    if (!array_key_exists("height", $logo)) {
+    if (!array_key_exists("width", $logo) || !is_numeric($logo['width'])) {
+        return FALSE;
+    }
+    if (!array_key_exists("height", $logo) || !is_numeric($logo['height'])) {
         return FALSE;
     }
 
