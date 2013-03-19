@@ -53,135 +53,83 @@ class Entity
         } catch (Exception $ee) {
             throw new EntityException($ee->getMessage());
         }
-    }
 
-    public function verifyOld($type, array $entityData)
-    {
-        $samlBindings = array (
-            "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact",
-            "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
-            "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
-            "urn:oasis:names:tc:SAML:2.0:bindings:PAOS",
-            "urn:oasis:names:tc:SAML:2.0:bindings:SOAP"
-        );
-
-        if (!in_array($type, array ("saml20-idp-remote", "saml20-sp-remote"))) {
-            throw new EntityException("unsupported metadata type");
+        if ("saml20-sp-remote" === $type) {
+            $this->verifySP($entityData);
         }
-
-        // we need to have a non-empty entityid entry
-        if (!array_key_exists("entityid", $entityData) || empty($entityData['entityid'])) {
-            throw new EntityException("missing or empty entityid");
-        }
-
-        // no whitespace allowed at beginning or end of entityid
-        if (trim($entityData['entityid']) !== $entityData['entityid']) {
-            throw new EntityException("invalid entityid, no whitespace allowed at beginning or end");
-        }
-
         if ("saml20-idp-remote" === $type) {
-            // IdP specific validation
-
-            // SSO is required and needs to be a valid URL
-            if (!array_key_exists("SingleSignOnService", $entityData)) {
-                throw new EntityException("missing SingleSignOnService");
-            }
-            if (!is_array($entityData["SingleSignOnService"])) {
-                throw new EntityException("invalid SingleSignOnService");
-            }
-            if (0 === count($entityData["SingleSignOnService"])) {
-                throw new EntityException("no SingleSignOnService endpoints");
-            }
-
-            foreach ($entityData["SingleSignOnService"] as $sso) {
-                if (!is_array($sso)) {
-                    throw new EntityException("invalid SingleSignOnService entry");
-                }
-                if (!array_key_exists("Location", $sso)) {
-                    throw new EntityException("missing SingleSignOnService Location");
-                }
-                if (FALSE === filter_var($sso["Location"], FILTER_VALIDATE_URL)) {
-                    throw new EntityException("invalid SingleSignOnService Location");
-                }
-                if (!array_key_exists("Binding", $sso)) {
-                    throw new EntityException("missing SingleSignOnService Binding");
-                }
-                if (!in_array($sso['Binding'], $samlBindings)) {
-                    throw new EntityException("unsupported SingleSignOnService Binding '" . $sso['Binding'] . "'");
-                }
-            }
-
-            $validCert = FALSE;
-            // we need a string certData (non empty)
-            if (array_key_exists("certData", $entityData) && !empty($entityData['certData'])) {
-                $validCert = TRUE;
-            }
-
-            // or a certFingerprint (array) with at least one non empty element
-            if (array_key_exists("certFingerprint", $entityData) && is_array($entityData['certFingerprint'])) {
-                foreach ($entityData['certFingerprint'] as $fp) {
-                    if (!empty($fp)) {
-                        $validCert = TRUE;
-                    }
-                }
-            }
-
-            // or a signing 'keys' entry
-            if (array_key_exists("keys", $entityData) && is_array($entityData['keys'])) {
-                foreach ($entityData['keys'] as $key) {
-                    if (is_array($key)) {
-                        if (array_key_exists("signing", $key) && $key['signing'] && array_key_exists("type",$key) && "X509Certificate" === $key['type'] && array_key_exists("X509Certificate", $key) && !empty($key['X509Certificate'])) {
-                            $validCert = TRUE;
-                        }
-                    }
-                }
-            }
-            if (!$validCert) {
-                throw new EntityException("invalid certificate or fingerprint");
-            }
-
-        } elseif ("saml20-sp-remote" === $type) {
-            // SP specific validation
-
-            // ACS is required and needs to be a valid URL
-            if (!array_key_exists("AssertionConsumerService", $entityData)) {
-                throw new EntityException("missing AssertionConsumerService");
-            }
-            if (!is_array($entityData["AssertionConsumerService"])) {
-                throw new EntityException("invalid AssertionConsumerService");
-            }
-            if (0 === count($entityData["AssertionConsumerService"])) {
-                throw new EntityException("no AssertionConsumerService endpoints");
-            }
-
-            foreach ($entityData["AssertionConsumerService"] as $acs) {
-                // index is also allowed and should probably be checked
-                if (!is_array($acs)) {
-                    throw new EntityException("invalid AssertionConsumerService entry");
-                }
-                // location
-                if (!array_key_exists("Location", $acs)) {
-                    throw new EntityException("missing AssertionConsumerService Location");
-                }
-                if (FALSE === filter_var($acs["Location"], FILTER_VALIDATE_URL)) {
-                    throw new EntityException("invalid AssertionConsumerService Location");
-                }
-
-                // binding
-                if (!array_key_exists("Binding", $acs)) {
-                    throw new EntityException("missing AssertionConsumerService Binding");
-                }
-                if (!in_array($acs['Binding'], $samlBindings)) {
-                    throw new EntityException("unsupported AssertionConsumerService Binding '" . $acs['Binding'] . "'");
-                }
-            }
-
-            // FIXME: all entries in IDPList *must* really exist
-
-        } else {
-            throw new EntityException("support for this type not implemented");
+            $this->verifyIdP($entityData);
         }
+    }
+
+    public function verifySP(array $entityData)
+    {
+        // must have IDPList entry and must have some IdPs listed there
+        if (!array_key_exists("IDPList", $entityData) || !is_array($entityData['IDPList'])) {
+            throw new EntityException("IDPList key must be set and must be an array");
+        }
+
+        $storage = new PdoStorage($this->_c);
+
+        // all mentioned IdPs MUST exist
+        foreach ($entityData['IDPList'] as $eid) {
+            if (FALSE === $storage->getEntity("saml20-idp-remote", $eid)) {
+                throw new EntityException("IdP in IDPList '" . $eid . "' does not exist");
+            }
+        }
+
+        // SP MUST have "attributes"
+        if (!array_key_exists("attributes", $entityData) || !is_array($entityData['attributes'])) {
+            throw new EntityException("attributes key must be set and must be an array");
+        }
+
+#        // SP MUST have an ACS
+#        if (!array_key_exists("AssertionConsumerService", $entityData)) {
+#            throw new EntityException("missing AssertionConsumerService");
+#        }
+#        if (!is_array($entityData["AssertionConsumerService"])) {
+#            throw new EntityException("invalid AssertionConsumerService");
+#        }
+#        if (0 === count($entityData["AssertionConsumerService"])) {
+#            throw new EntityException("no AssertionConsumerService endpoints");
+#        }
 
     }
 
+    public function verifyIdP(array $entityData)
+    {
+#        // IdP MUST have a SSO
+#        if (!array_key_exists("SingleSignOnService", $entityData)) {
+#            throw new EntityException("missing SingleSignOnService");
+#        }
+#        if (!is_array($entityData["SingleSignOnService"])) {
+#            throw new EntityException("invalid SingleSignOnService");
+#        }
+#        if (0 === count($entityData["SingleSignOnService"])) {
+#            throw new EntityException("no SingleSignOnService endpoints");
+#        }
+
+#        // IdP MUST have a valid certificate
+#        $validCert = FALSE;
+
+#        // we need a string certData (non empty)
+#        if (array_key_exists("certData", $entityData) && !empty($entityData['certData'])) {
+#            $validCert = TRUE;
+#        }
+
+#        // or a signing 'keys' entry
+#        if (array_key_exists("keys", $entityData) && is_array($entityData['keys'])) {
+#            foreach ($entityData['keys'] as $key) {
+#                if (is_array($key)) {
+#                    if (array_key_exists("signing", $key) && $key['signing'] && array_key_exists("type",$key) && "X509Certificate" === $key['type'] && array_key_exists("X509Certificate", $key) && !empty($key['X509Certificate'])) {
+#                        $validCert = TRUE;
+#                    }
+#                }
+#            }
+#        }
+
+#        if (!$validCert) {
+#            throw new EntityException("invalid certificate or fingerprint");
+#        }
+    }
 }
