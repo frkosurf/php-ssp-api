@@ -430,18 +430,18 @@ function validateGeo($geoHints)
         }
         if (2 === count($e)) {
             list($lat, $lon) = $e;
+            $lat = trim($lat);
+            $lon = trim($lon);
+
+            return "geo:$lat,$lon";
         }
         if (3 === count($e)) {
             list($lat, $lon, $alt) = $e;
-        }
-        $lat = trim($lat);
-        $lon = trim($lon);
-        if (isset($alt)) {
+            $lat = trim($lat);
+            $lon = trim($lon);
             $alt = trim($alt);
 
             return "geo:$lat,$lon,$alt";
         }
-
-        return "geo:$lat,$lon";
     }
 }
