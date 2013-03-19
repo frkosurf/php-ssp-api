@@ -301,7 +301,12 @@ function validateLogo(array $logo)
         return FALSE;
     }
 
-    return array ("url" => $logo['url'], "width" => (int) $logo['width'], "height" => (int) $logo['height']);
+    $l = array ("url" => $logo['url'], "width" => (int) $logo['width'], "height" => (int) $logo['height']);
+    if (array_key_exists("lang", $logo) && !empty($logo['lang'])) {
+        $l['lang'] = $logo['lang'];
+    }
+
+    return $l;
 }
 
 function moveAclToSP(&$idp, &$sp)
