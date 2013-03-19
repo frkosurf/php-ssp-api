@@ -2,19 +2,60 @@
 
 namespace SspApi;
 
+use \Exception as Exception;
+use \RestService\Utils\Config as Config;
+use \SimpleSAML_Metadata_SAMLBuilder as SimpleSAML_Metadata_SAMLBuilder;
+
 class Entity
 {
+    private $_c;
 
-    public static function verifyJson($type, $entityJson)
+    public function __construct(Config $c)
+    {
+        $this->_c = $c;
+
+        $sspPath = $this->_c->getSectionValue('simpleSAMLphp', 'sspPath') . DIRECTORY_SEPARATOR . 'lib' . DIRECTORY_SEPARATOR . '_autoload.php';
+        if (!file_exists($sspPath) || !is_file($sspPath) || !is_readable($sspPath)) {
+            throw new EntityException("invalid path to simpleSAMLphp");
+        }
+        require_once $sspPath;
+    }
+
+    public function verifyJson($type, $entityJson)
     {
         $entityData = json_decode($entityJson, TRUE);
         if (NULL === $entityData || !is_array($entityData)) {
             throw new EntityException("unable to decode data");
         }
-        self::verify($type, $entityData);
+        $this->verify($type, $entityData);
     }
 
-    public static function verify($type, array $entityData)
+    public function verify($type, array $entityData)
+    {
+        if (!in_array($type, array ("saml20-idp-remote", "saml20-sp-remote"))) {
+            throw new EntityException("unsupported metadata type");
+        }
+
+        // we need to have a non-empty entityid entry
+        if (!array_key_exists("entityid", $entityData) || empty($entityData['entityid'])) {
+            throw new EntityException("missing or empty entityid");
+        }
+
+        // no whitespace allowed at beginning or end of entityid
+        if (trim($entityData['entityid']) !== $entityData['entityid']) {
+            throw new EntityException("invalid entityid, no whitespace allowed at beginning or end");
+        }
+
+        try {
+            $builder = new SimpleSAML_Metadata_SAMLBuilder($entityData['entityid']);
+            $builder->addMetadata($type, $entityData);
+            $builder->addOrganizationInfo($entityData);
+        } catch (Exception $ee) {
+            throw new EntityException($ee->getMessage());
+        }
+    }
+
+    public function verifyOld($type, array $entityData)
     {
         $samlBindings = array (
             "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact",
@@ -25,25 +66,17 @@ class Entity
         );
 
         if (!in_array($type, array ("saml20-idp-remote", "saml20-sp-remote"))) {
-            throw new EntityException("unsupported type");
+            throw new EntityException("unsupported metadata type");
         }
 
         // we need to have a non-empty entityid entry
         if (!array_key_exists("entityid", $entityData) || empty($entityData['entityid'])) {
-            throw new EntityException("missing entityid");
+            throw new EntityException("missing or empty entityid");
         }
 
         // no whitespace allowed at beginning or end of entityid
         if (trim($entityData['entityid']) !== $entityData['entityid']) {
             throw new EntityException("invalid entityid, no whitespace allowed at beginning or end");
-        }
-
-        // we need to have a name with at least an english language entry
-        if (!array_key_exists("name", $entityData)) {
-            throw new EntityException("missing name");
-        }
-        if (!array_key_exists("en", $entityData["name"]) || empty($entityData["name"]["en"])) {
-            throw new EntityException("missing or empty english name");
         }
 
         if ("saml20-idp-remote" === $type) {
@@ -78,11 +111,34 @@ class Entity
                 }
             }
 
-            // certificate checking
-            if (!array_key_exists("certFingerprint", $entityData) && !array_key_exists("certData", $entityData)) {
-                throw new EntityException("missing certificate and certificate fingerprint");
+            $validCert = FALSE;
+            // we need a string certData (non empty)
+            if (array_key_exists("certData", $entityData) && !empty($entityData['certData'])) {
+                $validCert = TRUE;
             }
-            // FIXME: more certificate checking is needed! can also be in "keys" section...
+
+            // or a certFingerprint (array) with at least one non empty element
+            if (array_key_exists("certFingerprint", $entityData) && is_array($entityData['certFingerprint'])) {
+                foreach ($entityData['certFingerprint'] as $fp) {
+                    if (!empty($fp)) {
+                        $validCert = TRUE;
+                    }
+                }
+            }
+
+            // or a signing 'keys' entry
+            if (array_key_exists("keys", $entityData) && is_array($entityData['keys'])) {
+                foreach ($entityData['keys'] as $key) {
+                    if (is_array($key)) {
+                        if (array_key_exists("signing", $key) && $key['signing'] && array_key_exists("type",$key) && "X509Certificate" === $key['type'] && array_key_exists("X509Certificate", $key) && !empty($key['X509Certificate'])) {
+                            $validCert = TRUE;
+                        }
+                    }
+                }
+            }
+            if (!$validCert) {
+                throw new EntityException("invalid certificate or fingerprint");
+            }
 
         } elseif ("saml20-sp-remote" === $type) {
             // SP specific validation
@@ -119,6 +175,8 @@ class Entity
                     throw new EntityException("unsupported AssertionConsumerService Binding '" . $acs['Binding'] . "'");
                 }
             }
+
+            // FIXME: all entries in IDPList *must* really exist
 
         } else {
             throw new EntityException("support for this type not implemented");

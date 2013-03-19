@@ -59,7 +59,7 @@ class SspApi
 
         $entity = $this->_storage->getEntity($set, $entityId);
         if (FALSE === $entity) {
-            throw new SspApiException("not_found", "resource not found");
+            throw new SspApiException("not_found", "resource '" . $entityId . "' not found");
         }
 
         $response->setContent(json_encode($entity));
@@ -98,8 +98,9 @@ class SspApi
            throw new SspApiException("not_found", "resource not specified");
         }
 
+        $e = new Entity($this->_config);
         try {
-            Entity::verifyJson($set, $request->getContent());
+            $e->verifyJson($set, $request->getContent());
         } catch (EntityException $e) {
             throw new SspApiException("invalid_request", "invalid entity data [" . $e->getMessage() . "]") ;
         }
@@ -118,8 +119,9 @@ class SspApi
         $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
         $this->_resourceServer->requireScope("ssp");
 
+        $e = new Entity($this->_config);
         try {
-            Entity::verifyJson($set, $request->getContent());
+            $e->verifyJson($set, $request->getContent());
         } catch (EntityException $e) {
             throw new SspApiException("invalid_request", "invalid entity data [" . $e->getMessage() . "]") ;
         }

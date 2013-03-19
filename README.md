@@ -26,3 +26,9 @@ To update an entry from the file `sp.json`:
     
     curl -d @sp.json -X PUT -H "Authorization: Bearer abcdef" http://localhost/frkonext/php-ssp-api/api.php/saml20-sp-remote/entity?id=http://localhost/frkonext/sspsp/module.php/saml/sp/metadata.php/default-sp
 
+# Requirements
+This service uses simpleSAMLphp to validate the metadata that is sent to the 
+service. This means we do not have to implement our own metadata checking.
+
+You need to configure the path to simpleSAMLphp in the `config/config.ini` file.
+

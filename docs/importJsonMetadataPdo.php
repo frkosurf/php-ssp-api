@@ -21,19 +21,21 @@ foreach (glob($pathToMetadata . "/*.json") as $filename) {
     $metadata = json_decode($jsonMetadata, TRUE);
     $set = basename($filename, ".json");
     echo "importing set '$set'..." . PHP_EOL;
+    $e = new Entity($config);
     foreach ($metadata as $m) {
         echo "\t" . $m['entityid'] . PHP_EOL;
+    $m['metadata-set'] = $set;
         try {
-            Entity::verify($set, $m);
-        } catch (EntityException $e) {
-            echo "ERROR [verify]: " . $e->getMessage() . PHP_EOL;
+            $e->verify($set, $m);
+        } catch (EntityException $ee) {
+            echo "ERROR [verify]: " . $ee->getMessage() . PHP_EOL;
             continue;
         }
 
         try {
             $storage->postEntity($set, $m);
-        } catch (PDOException $e) {
-            echo "ERROR [database]: " . $e->getMessage() . PHP_EOL;
+        } catch (PDOException $pe) {
+            echo "ERROR [database]: " . $pe->getMessage() . PHP_EOL;
         }
     }
 }

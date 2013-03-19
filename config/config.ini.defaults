@@ -6,7 +6,7 @@ tokenInfoEndpoint = "http://localhost/php-oauth/tokeninfo.php"
 resourceServerRealm = "simpleSAMLphp API"
 
 [PdoStorage]
-dsn = "sqlite:/PATH/TO/APP/data/metadata.sqlite";
+dsn = "sqlite:/PATH/TO/APP/data/metadata.sqlite"
 ;dsn = "mysql:host=localhost;dbname=oauth"
 ;username = "oauth"
 ;password = "s3cr3t"
@@ -15,6 +15,9 @@ tablePrefix = ""
 ; use a persistent DB connection, make sure to ENABLE this for PRODUCTION 
 ; systems
 persistentConnection = FALSE
+
+[simpleSAMLphp]
+sspPath = "/var/simplesamlphp"
 
 ; Logging
 [Log]

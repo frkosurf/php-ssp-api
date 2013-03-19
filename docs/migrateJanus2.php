@@ -134,6 +134,8 @@ validateEndpoints($saml20_sp);
 enforceName($saml20_idp);
 enforceName($saml20_sp);
 
+// FIXME: redirect.sign and redirect.validate should be booleans (in IdP)?!!
+
 if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", json_encode(array_values($saml20_idp)))) {
     throw new Exception("unable to write 'saml20-idp-remote.json'");
 }
@@ -393,8 +395,12 @@ function enforceName(&$entities)
         if (array_key_exists("name", $metadata) && is_array($metadata['name']) && array_key_exists("en", $metadata["name"]) && !empty($metadata["name"]["en"])) {
             // all is fine
             continue;
+        } else {
+            echo "[WARNING] no name set for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
         }
 
+    }
+/*
         if (array_key_exists("name", $metadata) && is_array($metadata['name']) && array_key_exists("nl", $metadata["name"]) && !empty($metadata["name"]["nl"])) {
             // use name:nl for name:en
             echo "[WARNING] no name:en set for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "', we use name:nl for name:en" . PHP_EOL;
@@ -406,4 +412,5 @@ function enforceName(&$entities)
         echo "[WARNING] no name set for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "', we use entityId for name:en" . PHP_EOL;
         $entities[$eid]['name']['en'] = $metadata['entityid'];
     }
+*/
 }
