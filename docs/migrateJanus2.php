@@ -257,6 +257,7 @@ function convertToUIInfo(&$entities)
     // some keys belong in UIInfo (under a different name)
     foreach ($entities as $eid => $metadata) {
         $uiInfo = array();
+        $discoHints = array();
 
         if (array_key_exists("displayName", $metadata)) {
             $uiInfo['DisplayName'] = $metadata['displayName'];
@@ -271,6 +272,15 @@ function convertToUIInfo(&$entities)
             }
             unset($entities[$eid]['keywords']);
         }
+        if (array_key_exists("geoLocation", $metadata)) {
+            $geo = validateGeo($metadata['geoLocation']);
+            if (FALSE !== count($geo)) {
+                $discoHints['GeolocationHint'] = array($geo);
+            } else {
+               echo "[WARNING] GeolocationHint configuration invalid for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
+            }
+            unset($entities[$eid]['geoLocation']);
+        }
         if (array_key_exists("logo", $metadata)) {
             $logo = validateLogo($metadata["logo"][0]);
             if (FALSE !== $logo) {
@@ -283,6 +293,10 @@ function convertToUIInfo(&$entities)
         if (0 !== count($uiInfo)) {
             $entities[$eid]['UIInfo'] = $uiInfo;
         }
+        if (0 !== count($discoHints)) {
+            $entities[$eid]['DiscoHints'] = $discoHints;
+        }
+
     }
 }
 
@@ -405,17 +419,29 @@ function enforceName(&$entities)
         }
 
     }
-/*
-        if (array_key_exists("name", $metadata) && is_array($metadata['name']) && array_key_exists("nl", $metadata["name"]) && !empty($metadata["name"]["nl"])) {
-            // use name:nl for name:en
-            echo "[WARNING] no name:en set for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "', we use name:nl for name:en" . PHP_EOL;
-            $entities[$eid]['name']['en'] = $metadata['name']['nl'];
-            continue;
+}
+
+function validateGeo($geoHints)
+{
+    if (!empty($geoHints)) {
+        $e = explode(",", $geoHints);
+        if (2 !== count($e) && 3 !== count($e)) {
+            return FALSE;
+        }
+        if (2 === count($e)) {
+            list($lat, $lon) = $e;
+        }
+        if (3 === count($e)) {
+            list($lat, $lon, $alt) = $e;
+        }
+        $lat = trim($lat);
+        $lon = trim($lon);
+        if (isset($alt)) {
+            $alt = trim($alt);
+
+            return "geo:$lat,$lon,$alt";
         }
 
-        // no good name:en or name:nl available, set name:en to entityId
-        echo "[WARNING] no name set for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "', we use entityId for name:en" . PHP_EOL;
-        $entities[$eid]['name']['en'] = $metadata['entityid'];
+        return "geo:$lat,$lon";
     }
-*/
 }
