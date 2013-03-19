@@ -131,10 +131,8 @@ validateContacts($saml20_sp);
 validateEndpoints($saml20_idp);
 validateEndpoints($saml20_sp);
 
-enforceName($saml20_idp);
-enforceName($saml20_sp);
-
-// FIXME: redirect.sign and redirect.validate should be booleans (in IdP)?!!
+checkName($saml20_idp);
+checkName($saml20_sp);
 
 if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", json_encode(array_values($saml20_idp)))) {
     throw new Exception("unable to write 'saml20-idp-remote.json'");
@@ -179,7 +177,7 @@ function findAclConflicts(&$idp, &$sp)
 {
     foreach ($sp as $eid => $metadata) {
         if (!$metadata['allowAll']) {
-            echo "[ERROR  ] SP '" . $eid . "' does not have 'Allow All' set" . PHP_EOL;
+            echo "[WARNING] SP '" . $eid . "' does not have 'Allow All' set" . PHP_EOL;
             foreach ($metadata['IDPList'] as $i) {
                 if (!array_key_exists($i, $idp)) {
                     echo "\t[WARNING] IdP '" . $i . "' listed for SP '" . $eid . "' does not exist" . PHP_EOL;
@@ -196,7 +194,7 @@ function findAclConflicts(&$idp, &$sp)
     foreach ($idp as $eid => $metadata) {
         echo "[INFO] IdP '" . $eid . "'" . PHP_EOL;
         if ($metadata['allowAll']) {
-            echo "[ERROR  ] IdP '" . $eid . "' has 'Allow All' set" . PHP_EOL;
+            echo "[WARNING] IdP '" . $eid . "' has 'Allow All' set" . PHP_EOL;
             continue;
         }
         foreach ($metadata['SPList'] as $s) {
@@ -243,10 +241,14 @@ function validateEndpoints(&$entities)
                     if (FALSE !== $filteredEndpoint) {
                         $entities[$eid][$type][$k] = $filteredEndpoint;
                     } else {
+                        echo "[WARNING] Endpoint configuration invalid for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
                         unset($entities[$eid][$type][$k]);
                     }
                 }
                 $entities[$eid][$type] = array_values($entities[$eid][$type]);
+                if (0 === count($entities[$eid][$type])) {
+                    unset($entities[$eid][$type]);
+                }
             }
         }
     }
@@ -407,9 +409,8 @@ function filterEndpoint(array $ep)
     return $validatedEndpoint;
 }
 
-function enforceName(&$entities)
+function checkName(&$entities)
 {
-    // name needs to be set, no matter what, set it to entityId if it is not specified
     foreach ($entities as $eid => $metadata) {
         if (array_key_exists("name", $metadata) && is_array($metadata['name']) && array_key_exists("en", $metadata["name"]) && !empty($metadata["name"]["en"])) {
             // all is fine
@@ -417,7 +418,6 @@ function enforceName(&$entities)
         } else {
             echo "[WARNING] no name set for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
         }
-
     }
 }
 
