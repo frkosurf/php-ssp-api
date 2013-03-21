@@ -66,8 +66,7 @@ EOF;
         $arpResult = $sth->fetch(PDO::FETCH_ASSOC);
         if (NULL !== $arpResult['attributes']) {
             $metadata['attributes'] = array_keys(unserialize($arpResult['attributes']));
-            $allAttributes += $metadata['attributes'];
-            $allAttributes = array_unique($allAttributes);
+            $allAttributes = array_unique(array_merge($allAttributes, $metadata['attributes']));
         } else {
             $metadata['attributes'] = array();
         }
