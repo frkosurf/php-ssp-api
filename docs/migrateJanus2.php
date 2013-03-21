@@ -103,7 +103,7 @@ EOF;
     }
     $metadata['metadata-set'] = $r['type'] . "-remote";
     $metadata['state'] = $r['state'];
-
+    $metadata['log'] = array();
     if ($metadata['metadata-set'] === "saml20-sp-remote") {
         $metadata['IDPList'] = $a;
         $saml20_sp[$r['entityid']] = $metadata;
@@ -176,14 +176,15 @@ function findAclConflicts(&$idp, &$sp)
 {
     foreach ($sp as $eid => $metadata) {
         if (!$metadata['allowAll']) {
-            echo "[WARNING] SP '" . $eid . "' does not have 'Allow All' set" . PHP_EOL;
+            _l($sp, $eid, "WARNING", "'allowAll' not set");
             foreach ($metadata['IDPList'] as $i) {
                 if (!array_key_exists($i, $idp)) {
-                    echo "\t[WARNING] IdP '" . $i . "' listed for SP '" . $eid . "' does not exist" . PHP_EOL;
+                    _l($sp, $eid, "WARNING", "IdP '$i' does not exist");
                     continue;
                 }
                 if (!in_array($eid, $idp[$i]['SPList'])) {
-                    echo "\t[WARNING] IdP '" . $i . "' does not have SP '" . $eid . "' in its ACL" . PHP_EOL;
+                    _l($sp, $eid, "WARNING", "IdP '$i' does not have this SP listed");
+                    // FIXME: add also IdP log item?
                     continue;
                 }
             }
@@ -191,21 +192,20 @@ function findAclConflicts(&$idp, &$sp)
     }
 
     foreach ($idp as $eid => $metadata) {
-        echo "[INFO] IdP '" . $eid . "'" . PHP_EOL;
         if ($metadata['allowAll']) {
-            echo "[WARNING] IdP '" . $eid . "' has 'Allow All' set" . PHP_EOL;
+            _l($idp, $eid, "WARNING", "'allowAll' set");
             continue;
         }
         foreach ($metadata['SPList'] as $s) {
             if (!array_key_exists($s, $sp)) {
-                echo "\t[WARNING] SP '" . $s . "' listed for IdP '" . $eid . "' does not exist" . PHP_EOL;
+                _l($idp, $eid, "WARNING", "SP $s does not exist");
                 continue;
             }
             if ($sp[$s]['allowAll']) {
                 continue;
             }
             if (!in_array($eid, $sp[$s]['IDPList'])) {
-                echo "\t[WARNING] SP '" . $s . "' does not have IdP '" . $eid . "' in its ACL" . PHP_EOL;
+                _l($idp, $eid, "WARNING", "SP $s does not have this IdP listed");
             }
         }
     }
@@ -240,7 +240,7 @@ function validateEndpoints(&$entities)
                     if (FALSE !== $filteredEndpoint) {
                         $entities[$eid][$type][$k] = $filteredEndpoint;
                     } else {
-                        echo "[WARNING] Endpoint configuration invalid for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
+                        _l($entities, $eid, "WARNING", "invalid endpoint configuration");
                         unset($entities[$eid][$type][$k]);
                     }
                 }
@@ -278,7 +278,7 @@ function convertToUIInfo(&$entities)
             if (FALSE !== count($geo)) {
                 $discoHints['GeolocationHint'] = array($geo);
             } else {
-               echo "[WARNING] GeolocationHint configuration invalid for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
+                _l($entities, $eid, "WARNING", "invalid GeolocationHint");
             }
             unset($entities[$eid]['geoLocation']);
         }
@@ -287,7 +287,7 @@ function convertToUIInfo(&$entities)
             if (FALSE !== $logo) {
                 $uiInfo['Logo'] = array($logo);
             } else {
-                echo "[WARNING] Logo configuration invalid for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
+                _l($entities, $eid, "WARNING", "invalid Logo configuration");
             }
             unset($entities[$eid]['logo']);
         }
@@ -335,7 +335,7 @@ function moveAclToSP(&$idp, &$sp)
     foreach ($idp as $eid => $metadata) {
         foreach ($metadata['SPList'] as $s) {
             if (!array_key_exists($s, $sp)) {
-                echo "[WARNING] SP '" . $s . "' does not exist" . PHP_EOL;
+                _l($idp, $eid, "WARNING", "SP $s does not exist");
                 continue;
             }
             array_push($sp[$s]["IDPList"], $eid);
@@ -415,7 +415,7 @@ function checkName(&$entities)
             // all is fine
             continue;
         } else {
-            echo "[WARNING] no name set for '" . $entities[$eid]['metadata-set'] . "' entity '" . $eid . "'" . PHP_EOL;
+            _l($entities, $eid, "WARNING", "no name set");
         }
     }
 }
@@ -443,4 +443,9 @@ function validateGeo($geoHints)
             return "geo:$lat,$lon,$alt";
         }
     }
+}
+
+function _l(&$entities, $eid, $level, $message)
+{
+    array_push($entities[$eid]["log"], array("level" => $level, "message" => $message));
 }
