@@ -31,6 +31,7 @@ $result = $sth->fetchAll(PDO::FETCH_ASSOC);
 $saml20_idp = array();
 $saml20_sp = array();
 $allAttributes = array();
+$log = array();
 
 // for every entry fetch the metadata
 foreach ($result as $r) {
@@ -103,7 +104,9 @@ EOF;
     }
     $metadata['metadata-set'] = $r['type'] . "-remote";
     $metadata['state'] = $r['state'];
-    $metadata['log'] = array();
+
+    $log[$metadata['metadata-set']][$metadata['entityid']] = array();
+
     if ($metadata['metadata-set'] === "saml20-sp-remote") {
         $metadata['IDPList'] = $a;
         $saml20_sp[$r['entityid']] = $metadata;
@@ -145,6 +148,10 @@ if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "allAttributes
     throw new Exception("unable to write 'allAttributes.json'");
 }
 
+if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "entityLog.json", json_encode($log))) {
+    throw new Exception("unable to write 'entityLog.json'");
+}
+
 function arrayizeMetadata(&$metadata)
 {
     foreach ($metadata as $k => $v) {
@@ -176,14 +183,14 @@ function findAclConflicts(&$idp, &$sp)
 {
     foreach ($sp as $eid => $metadata) {
         if (!$metadata['allowAll']) {
-            _l($sp, $eid, "WARNING", "'allowAll' not set");
+            _l($metadata, "WARNING", "'allowAll' not set");
             foreach ($metadata['IDPList'] as $i) {
                 if (!array_key_exists($i, $idp)) {
-                    _l($sp, $eid, "WARNING", "IdP '$i' does not exist");
+                    _l($metadata, "WARNING", "IdP '$i' does not exist");
                     continue;
                 }
                 if (!in_array($eid, $idp[$i]['SPList'])) {
-                    _l($sp, $eid, "WARNING", "IdP '$i' does not have this SP listed");
+                    _l($metadata, "WARNING", "IdP '$i' does not have this SP listed");
                     // FIXME: add also IdP log item?
                     continue;
                 }
@@ -193,19 +200,19 @@ function findAclConflicts(&$idp, &$sp)
 
     foreach ($idp as $eid => $metadata) {
         if ($metadata['allowAll']) {
-            _l($idp, $eid, "WARNING", "'allowAll' set");
+            _l($metadata, "WARNING", "'allowAll' set");
             continue;
         }
         foreach ($metadata['SPList'] as $s) {
             if (!array_key_exists($s, $sp)) {
-                _l($idp, $eid, "WARNING", "SP $s does not exist");
+                _l($metadata, "WARNING", "SP $s does not exist");
                 continue;
             }
             if ($sp[$s]['allowAll']) {
                 continue;
             }
             if (!in_array($eid, $sp[$s]['IDPList'])) {
-                _l($idp, $eid, "WARNING", "SP $s does not have this IdP listed");
+                _l($metadata, "WARNING", "SP $s does not have this IdP listed");
             }
         }
     }
@@ -240,7 +247,7 @@ function validateEndpoints(&$entities)
                     if (FALSE !== $filteredEndpoint) {
                         $entities[$eid][$type][$k] = $filteredEndpoint;
                     } else {
-                        _l($entities, $eid, "WARNING", "invalid endpoint configuration");
+                        _l($metadata, "WARNING", "invalid endpoint configuration");
                         unset($entities[$eid][$type][$k]);
                     }
                 }
@@ -278,7 +285,7 @@ function convertToUIInfo(&$entities)
             if (FALSE !== count($geo)) {
                 $discoHints['GeolocationHint'] = array($geo);
             } else {
-                _l($entities, $eid, "WARNING", "invalid GeolocationHint");
+                _l($metadata, "WARNING", "invalid GeolocationHint");
             }
             unset($entities[$eid]['geoLocation']);
         }
@@ -287,7 +294,7 @@ function convertToUIInfo(&$entities)
             if (FALSE !== $logo) {
                 $uiInfo['Logo'] = array($logo);
             } else {
-                _l($entities, $eid, "WARNING", "invalid Logo configuration");
+                _l($metadata, "WARNING", "invalid Logo configuration");
             }
             unset($entities[$eid]['logo']);
         }
@@ -335,7 +342,7 @@ function moveAclToSP(&$idp, &$sp)
     foreach ($idp as $eid => $metadata) {
         foreach ($metadata['SPList'] as $s) {
             if (!array_key_exists($s, $sp)) {
-                _l($idp, $eid, "WARNING", "SP $s does not exist");
+                _l($metadata, "WARNING", "SP $s does not exist");
                 continue;
             }
             array_push($sp[$s]["IDPList"], $eid);
@@ -415,7 +422,7 @@ function checkName(&$entities)
             // all is fine
             continue;
         } else {
-            _l($entities, $eid, "WARNING", "no name set");
+            _l($metadata, "WARNING", "no name set");
         }
     }
 }
@@ -445,7 +452,8 @@ function validateGeo($geoHints)
     }
 }
 
-function _l(&$entities, $eid, $level, $message)
+function _l($metadata, $level, $message)
 {
-    array_push($entities[$eid]["log"], array("level" => $level, "message" => $message));
+    global $log;
+    array_push($log[$metadata['metadata-set']][$metadata['entityid']], array("level" => $level, "message" => $message));
 }
