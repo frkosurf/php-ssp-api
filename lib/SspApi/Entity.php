@@ -64,7 +64,7 @@ class Entity
 
     public function verifySP(array $entityData)
     {
-        // must have IDPList entry and must have some IdPs listed there
+        // must have IDPList array entry and can have some IdPs listed there
         if (!array_key_exists("IDPList", $entityData) || !is_array($entityData['IDPList'])) {
             throw new EntityException("IDPList key must be set and must be an array");
         }

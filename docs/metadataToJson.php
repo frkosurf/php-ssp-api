@@ -1,5 +1,5 @@
 <?php
-// script to convert SAML metadata to
+// script to convert SAML metadata to JSON
 if ($argc < 2) {
     die("please specify the metadata file or URL to parse." . PHP_EOL);
 }
@@ -20,42 +20,12 @@ if (NULL === $metadata) {
     die("unable to find either IdP or SP metadata" . PHP_EOL);
 }
 
-cleanupArray($metadata);
-
 if (array_key_exists("entityDescriptor", $metadata)) {
     unset ($metadata['entityDescriptor']);
 }
 
-// take keys and clean the certificate, and use old SSP format
-if (array_key_exists("keys", $metadata)) {
-    foreach ($metadata['keys'] as $key) {
-        if (array_key_exists("signing", $key) && $key['signing']) {
-            // we want signing key!
-            $cert = $key['X509Certificate'];
-            $cert = str_replace("\n", "", $cert);
-            $cert = str_replace("\r", "", $cert);
-            $derCert = base64_decode($cert);
-            $fingerprint = sha1($derCert);
-            $metadata['certData'] = array($cert);
-            $metadata['certFingerprint'] = array ($fingerprint);
-            unset($metadata['keys']);
-        }
-    }
+if ("saml20-sp-remote" === $metadata['metadata-set']) {
+    $metadata['IDPList'] = array();
 }
-$metadata['metadata-url'] = $metadataFile;
-//echo $metadata['entityid'] . " expires in " . ($metadata['expire'] - time()) . "s" . PHP_EOL;
-echo json_encode($metadata);
 
-// remove empty values recursively
-function cleanupArray(array &$a)
-{
-    foreach ($a as $k => $v) {
-        if (empty($v)) {
-            unset($a[$k]);
-            continue;
-        }
-        if (is_array($v)) {
-            cleanupArray($a[$k]);
-        }
-    }
-}
+echo json_encode($metadata);
