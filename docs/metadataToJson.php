@@ -1,5 +1,5 @@
 <?php
-// script to convert SAML metadata to JSON
+// script to convert SAML metadata from URL or file to JSON
 if ($argc < 2) {
     die("please specify the metadata file or URL to parse." . PHP_EOL);
 }
