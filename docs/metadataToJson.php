@@ -28,4 +28,4 @@ if ("saml20-sp-remote" === $metadata['metadata-set']) {
     $metadata['IDPList'] = array();
 }
 
-echo json_encode($metadata);
+echo json_encode(array($metadata));
