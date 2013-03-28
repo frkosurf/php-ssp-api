@@ -16,7 +16,7 @@ use \SspApi\EntityException as EntityException;
 $config = new Config('config/config.ini');
 $storage = new PdoStorage($config);
 
-foreach (glob($pathToMetadata . "/*.json") as $filename) {
+foreach (glob($pathToMetadata . "/*-remote.json") as $filename) {
     $jsonMetadata = file_get_contents($filename);
     $metadata = json_decode($jsonMetadata, TRUE);
     $set = basename($filename, ".json");

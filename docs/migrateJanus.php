@@ -3,547 +3,457 @@
 if ($argc < 2) {
     die("specify the directory to write the JSON data to" . PHP_EOL);
 }
+$dirName = $argv[1];
 
 $data = array();
 
 $pdo = new PDO("mysql:host=127.0.0.1;dbname=sr", "root", NULL);
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-// figure out all eids for both sp and idp that are prodaccepted and active
-$sql = "SELECT eid FROM janus__entity GROUP BY eid ORDER BY eid";
+$sql = <<< EOF
+    SELECT
+        metadataurl, arp, eid, type, allowedall, entityid, state, revisionid
+    FROM
+        janus__entity e
+    WHERE
+        active = "yes" AND revisionid = (SELECT
+                MAX(revisionid)
+            FROM
+                janus__entity
+            WHERE
+                eid = e.eid)
+EOF;
+
 $sth = $pdo->prepare($sql);
 $sth->execute();
 $result = $sth->fetchAll(PDO::FETCH_ASSOC);
 
-$data = array();
+$saml20_idp = array();
+$saml20_sp = array();
+$allAttributes = array();
+$log = array();
 
+// for every entry fetch the metadata
 foreach ($result as $r) {
-    $eid = $r['eid'];
-    // figure out the latest revision of the eids and the entityid
-    $sql = "SELECT entityid, revisionid, arp, state, active, type, metadataurl FROM janus__entity WHERE eid=:eid ORDER BY revisionid DESC LIMIT 0,1";
+    $metadata = array();
+
+$sql = <<< EOF
+    SELECT
+        `key`, `value`
+    FROM
+        janus__metadata
+    WHERE
+        eid = :eid AND revisionid = :revisionid
+EOF;
+
     $sth = $pdo->prepare($sql);
-    $sth->bindValue(":eid", $eid);
+    $sth->bindValue(":eid", $r['eid']);
+    $sth->bindValue(":revisionid", $r['revisionid']);
     $sth->execute();
-    $result = $sth->fetch(PDO::FETCH_ASSOC);
-
-    if ("prodaccepted" !== $result['state'] || "yes" !== $result['active']) {
-        // we only want prodaccepted and active entries
-        continue;
+    $m = $sth->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($m as $kv) {
+        $metadata[$kv['key']] = $kv['value'];
     }
 
-    $type = $result['type'];
-    $data[$type][$eid]['entityid'] = $result['entityid'];
+    // turn all entries with a ":" into proper arrays
+    arrayizeMetadata($metadata);
 
-    $mdu = trim($result['metadataurl']);
-    if (empty($mdu)) {
-
-        $mdu = NULL;
-    }
-    if (!empty($mdu)) {
-        // seems to be a metadata URL
-        // check if it is valid
-        if (FALSE === filter_var($mdu, FILTER_VALIDATE_URL)) {
-            echo "WARNING: invalid metadata URL '" . $mdu . "'" . PHP_EOL;
-            $mdu = NULL;
-        }
-        // echo "INFO: " . $type . " metadata URL: " . $mdu . PHP_EOL;
-    } else {
-        echo "WARNING: missing metadate URL for " . $result['entityid'] . PHP_EOL;
-        $mdu = NULL;
-    }
-
-    $data[$type][$eid]['metadata-url'] = $mdu;
-
-    // get ARP if entry is a service provider
-    if ("saml20-sp" === $type) {
+    // add ARP if SP
+    if ("saml20-sp" === $r['type']) {
         $sql = "SELECT attributes FROM janus__arp WHERE aid = :aid";
         $sth = $pdo->prepare($sql);
-        $sth->bindValue(":aid", $result['arp']);
+        $sth->bindValue(":aid", $r['arp']);
         $sth->execute();
         $arpResult = $sth->fetch(PDO::FETCH_ASSOC);
         if (NULL !== $arpResult['attributes']) {
-            $data[$type][$eid]['attributes'] = array_keys(unserialize($arpResult['attributes']));
+            $metadata['attributes'] = array_keys(unserialize($arpResult['attributes']));
+            $allAttributes = array_unique(array_merge($allAttributes, $metadata['attributes']));
         } else {
-            $data[$type][$eid]['attributes'] = array();
+            $metadata['attributes'] = array();
         }
     }
 
-    // figure out some metadata parameters
-    $sql = "SELECT `key`, `value` FROM `janus__metadata` WHERE `eid` = :eid AND `revisionid` = :revisionid";
+$sql = <<< EOF
+    SELECT
+        e.entityid
+    FROM
+        `janus__entity` e,
+        `janus__allowedEntity` a
+    WHERE
+        a.eid = :eid AND a.revisionid = :revisionid
+            AND e.eid = a.remoteeid
+            AND e.revisionid = (SELECT
+                MAX(revisionid)
+            FROM
+                `janus__entity`
+            WHERE
+                eid = a.remoteeid)
+EOF;
+
     $sth = $pdo->prepare($sql);
-    $sth->bindValue(":eid", $eid);
-    $sth->bindValue(":revisionid", $result['revisionid']);
+    $sth->bindValue(":eid", $r['eid']);
+    $sth->bindValue(":revisionid", $r['revisionid']);
     $sth->execute();
-    $metadataResult = $sth->fetchAll(PDO::FETCH_ASSOC);
+    $a = $sth->fetchAll(PDO::FETCH_COLUMN);
 
-    $metadata = fetchMetadata($type, $metadataResult, $result['entityid']);
-    if (FALSE === $metadata) {
-//        echo "WARNING: " . $result['entityid'] . " missing required " . $type . " values" . PHP_EOL;
-        unset($data[$type][$eid]);
-        continue;
+    $metadata['allowAll'] = "yes" === $r['allowedall'];
+
+    $metadata['entityid'] = $r['entityid'];
+    if (!empty($r['metadataurl'])) {
+        $metadata['metadata-url'] = $r['metadataurl'];
     }
-
-    $data[$type][$eid] += $metadata;
-
-    // get the ACL
-    $sql = "SELECT `remoteeid` FROM `janus__allowedEntity` WHERE `eid` = :eid AND `revisionid` = :revisionid";
-    $sth = $pdo->prepare($sql);
-    $sth->bindValue(":eid", $eid);
-    $sth->bindValue(":revisionid", $result['revisionid']);
-    $sth->execute();
-    $aclResult = $sth->fetchAll(PDO::FETCH_ASSOC);
-
-    $aclList = array();
-    foreach ($aclResult as $aclEntry) {
-        array_push($aclList, $aclEntry['remoteeid']);
-    }
-
-    if ("saml20-sp" === $type) {
-        $data[$type][$eid]['IDPList'] = $aclList;
-    }
-    if ("saml20-idp" === $type) {
-        $data[$type][$eid]['SPList'] = $aclList;
-    }
-}
-
-// now replace eids with entityids in the lists
-foreach ($data as $type => $entries) {
-    foreach ($entries as $eid => $values) {
-        if ("saml20-sp" === $type) {
-            // find the idpList
-            foreach ($values['IDPList'] as $k => $v) {
-                if (array_key_exists($v, $data['saml20-idp'])) {
-                    $data["saml20-sp"][$eid]['IDPList'][$k] = $data['saml20-idp'][$v]['entityid'];
-                } else {
-                    echo "WARNING: SP " . $values['entityid'] . " (" . $eid . ") contains non-existing IdP $v" . PHP_EOL;
-                    unset($data["saml20-sp"][$eid]['IDPList'][$k]);
-                }
-            }
-        }
-        if ("saml20-idp" === $type) {
-            // find the spList
-            foreach ($values['SPList'] as $k => $v) {
-                if (array_key_exists($v, $data['saml20-sp'])) {
-                    $data["saml20-idp"][$eid]['SPList'][$k] = $data['saml20-sp'][$v]['entityid'];
-                } else {
-                    echo "WARNING: IdP " . $values['entityid'] . " (" . $eid . ") contains non-existing SP $v" . PHP_EOL;
-                    unset($data["saml20-idp"][$eid]['SPList'][$k]);
-                }
-            }
-        }
-    }
-}
-
-// verify whether ACL entries on the SP side have matching entry on the IdP side
-foreach ($data['saml20-sp'] as $k => $v) {
-    if (!empty($v['IDPList'])) {
-        // echo "SP " . $spEntry['entityid'] . " has " . count($v['IDPList']) . " IdPs in the ACL" . PHP_EOL;
-        foreach ($v['IDPList'] as $idp) {
-        //    echo "\t" . $idp . PHP_EOL;
-            // look for this SP in the idpList
-            foreach ($data['saml20-idp'] as $idpEntry) {
-                if ($idpEntry['entityid'] === $idp) {
-                    if (!in_array($v['entityid'], $idpEntry['SPList'])) {
-                        echo "WARNING: SP " . $v['entityid'] . " not found at IdP " . $idp . PHP_EOL;
-                    }
-                }
-            }
-        }
-        // empty the idpList, we fill this from the IdP side later
-        $data['saml20-sp'][$k]['IDPList'] = array();
-    }
-}
-
-// now for every IdP add its entityid to the idpList of the SP it lists in its
-// spList
-foreach ($data['saml20-idp'] as $k => $v) {
-    foreach ($v['SPList'] as $sp) {
-        // look for $sp in the saml20-sp data structure
-        foreach ($data['saml20-sp'] as $spKey => $spEntry) {
-            if ($spEntry['entityid'] === $sp) {
-                array_push($data['saml20-sp'][$spKey]['IDPList'], $v['entityid']);
-            }
-        }
-    }
-
-    // remove the spList entry as all ACLs are now configured at the SP
-    unset($data['saml20-idp'][$k]['SPList']);
-}
-
-// print all list of unique attributes used in the ARPs of all SPs
-$allAttributes = array();
-foreach ($data['saml20-sp'] as $k => $v) {
-    foreach ($v['attributes'] as $a) {
-        if (!in_array($a, $allAttributes)) {
-            array_push($allAttributes, $a);
-        }
-    }
-}
-echo "ALL ATTRIBUTES USED IN 'ARP':" . PHP_EOL;
-echo json_encode($allAttributes) . PHP_EOL;
-
-$idpList = array_values($data["saml20-idp"]);
-$spList = array_values($data["saml20-sp"]);
-
-// write data for IdPs to JSON file
-$encoding = json_encode($idpList);
-file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", $encoding);
-
-// write data for SPs to JSON file
-$encoding = json_encode($spList);
-file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-sp-remote.json", $encoding);
-
-function fetchMetadata($type, array $result, $entityId)
-{
-    $metadata = array();
-
-    if ("saml20-idp" === $type) {
-
-        $name = array();
-        $displayName = array();
-
-        $keywords = array();
-        $contacts = array();
-
-        $metadata['certFingerprint'] = array();
-        $metadata['SingleSignOnService'] = array();
-        $metadata['SingleLogoutService'] = array();
-
-        foreach ($result as $entry) {
-            if ($entry['key'] === 'SingleSignOnService:0:Location') {
-                $metadata['SingleSignOnService'][0]['Location'] = $entry['value'];
-            }
-            if ($entry['key'] === 'SingleLogoutService:0:Location') {
-                $metadata['SingleLogoutService'][0]['Location'] = $entry['value'];
-            }
-
-            if ($entry['key'] === 'SingleSignOnService:0:Binding') {
-                $metadata['SingleSignOnService'][0]['Binding'] = $entry['value'];
-            }
-            if ($entry['key'] === 'SingleLogoutService:0:Binding') {
-                $metadata['SingleLogoutService'][0]['Binding'] = $entry['value'];
-            }
-
-            // logo
-            if ($entry['key'] === 'logo:0:url' && !empty($entry['value'])) {
-                $metadata['UIInfo']['Logo']['url'] = $entry['value'];
-            }
-
-            if ($entry['key'] === 'logo:0:width' && is_numeric($entry['value'])) {
-                $metadata['UIInfo']['Logo']['width'] = (int) $entry['value'];
-            }
-
-            if ($entry['key'] === 'logo:0:height' && is_numeric($entry['value'])) {
-                $metadata['UIInfo']['Logo']['height'] = (int) $entry['value'];
-            }
-
-            // contacts
-            if (strpos($entry['key'], 'contacts:') === 0) {
-                // determine number
-                list($c_foo, $c_no, $c_t) = explode(":", $entry['key']);
-                $contacts[$c_no][$c_t] = $entry['value'];
-            }
-
-            // name
-            if (strpos($entry['key'], 'name:') === 0) {
-                list(, $c_lang) = explode(":", $entry['key']);
-                $name[$c_lang] = $entry['value'];
-            }
-            // displayName
-            if (strpos($entry['key'], 'displayName:') === 0) {
-                list(, $c_lang) = explode(":", $entry['key']);
-                $displayName[$c_lang] = $entry['value'];
-            }
-
-            // keywords
-            if ($entry['key'] === 'keywords:en') {
-                $keywords["en"] = explode(" ", $entry['value']);
-            }
-            if ($entry['key'] === 'keywords:nl') {
-                $keywords["nl"] = explode(" ", $entry['value']);
-            }
-
-            // certificate
-            if ($entry['key'] === "certData") {
-                array_push($metadata['certFingerprint'], sha1(base64_decode($entry['value'])));
-            }
-            if ($entry['key'] === "certData2") {
-                array_push($metadata['certFingerprint'], sha1(base64_decode($entry['value'])));
-            }
-        }
-
-        cleanupName($entityId, $metadata, $name, $displayName);
-
-        // cleanup contacts
-        $metadata['contacts'] = cleanUpContacts($contacts);
-
-        // SSO MUST be set
-        if (!array_key_exists("SingleSignOnService", $metadata) || empty($metadata['SingleSignOnService'])) {
-            echo "WARNING: SingleSignOnService not set for $entityId" . PHP_EOL;
-
-            return FALSE;
-        }
-        // certFingerprint MUST be set
-        if (!array_key_exists("certFingerprint", $metadata) || empty($metadata['certFingerprint'])) {
-            echo "WARNING: certFingerprint not set for $entityId" . PHP_EOL;
-
-            return FALSE;
-        }
-
-        if (!array_key_exists("UIInfo", $metadata)) {
-            echo "WARNING: logo not set for " . $entityId . PHP_EOL;
-        }
-
-        // validate logo
-        if (array_key_exists("UIInfo", $metadata) && array_key_exists("Logo", $metadata['UIInfo']) && array_key_exists("url", $metadata['UIInfo']['Logo'])) {
-            // url available, height and width should be set
-            $is = @getimagesize($metadata['UIInfo']['Logo']['url']);
-            if (FALSE === $is || !is_array($is) || count($is) < 2) {
-                echo "WARNING: unable to decode logo for " . $entityId . PHP_EOL;
-                unset($metadata['UIInfo']['Logo']);
-            } else {
-                list($width, $height) = $is;
-
-                if (!array_key_exists("height", $metadata['UIInfo']['Logo'])) {
-                    echo "WARNING: logo height not set for " . $entityId . ", is: " . $height . PHP_EOL;
-                } else {
-                    if ($height !== $metadata['UIInfo']['Logo']['height']) {
-                        echo "WARNING: logo height does not match actual picture height for " . $entityId . ", is: " . $height . ", specified: " . $metadata['UIInfo']['Logo']['height'] . PHP_EOL;
-                    }
-                }
-                if (!array_key_exists("width", $metadata['UIInfo']['Logo'])) {
-                    echo "WARNING: logo width not set for " . $entityId . ", is: " . $width . PHP_EOL;
-                } else {
-                    if ($width !== $metadata['UIInfo']['Logo']['width']) {
-                        echo "WARNING: logo width does not match actual picture width for " . $entityId . ", is: " . $width . ", specified: " . $metadata['UIInfo']['Logo']['width'] . PHP_EOL;
-                    }
-                }
-                // override image size based on actual size of logo anyway
-                $metadata['UIInfo']['Logo']['height'] = $height;
-                $metadata['UIInfo']['Logo']['width'] = $width;
-                // needs to be array, FIXME: make this nice!
-                $metadata['UIInfo']['Logo'] = array($metadata['UIInfo']['Logo']);
-            }
-        }
-
-        // keywords
-        // remove empty keywords and keywords that contains a "+" symbol or need html encoding
-        foreach ($keywords as $k => $v) {
-            $keywords[$k] = array_filter($keywords[$k], function($v) use ($entityId) {
-                if (empty($v)) {
-                    echo "WARNING: empty keyword for " . $entityId . PHP_EOL;
-
-                    return FALSE;
-                }
-                if (strpos($v, "+") !== FALSE) {
-                    echo "WARNING: keyword contains '+' for " . $entityId . PHP_EOL;
-
-                    return FALSE;
-                }
-                if (htmlentities($v) !== $v) {
-                    echo "WARNING: keyword '" . $v . "' contains special characters for " . $entityId . PHP_EOL;
-
-                    return FALSE;
-                }
-
-                return TRUE;
-            });
-        }
-        sort($keywords["en"]);
-        sort($keywords["nl"]);
-
-        $metadata['UIInfo']['Keywords']["en"] = array_values(array_unique($keywords["en"]));
-        $metadata['UIInfo']['Keywords']["nl"] = array_values(array_unique($keywords["nl"]));
-    }
-
-    if ("saml20-sp" === $type) {
-
-        $name = array();
-        $displayName = array();
-
-        $contacts = array();
-
-        $oauth = array();
-
-        $metadata['AssertionConsumerService'] = array();
-
-        foreach ($result as $entry) {
-            if ($entry['key'] === 'AssertionConsumerService:0:Location') {
-                $metadata['AssertionConsumerService'][0]['Location'] = $entry['value'];
-            }
-            if ($entry['key'] === 'AssertionConsumerService:0:Binding') {
-                if ("urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" !== $entry['value']) {
-                    echo "WARNING: " . $entityId . " does not use HTTP-POST binding, but '" . $entry['value'] . "' instead" . PHP_EOL;
-                } else {
-                    $metadata['AssertionConsumerService'][0]['Binding'] = $entry['value'];
-                }
-            }
-            if ($entry['key'] === 'NameIDFormat') {
-                $validNameIDs = array (
-                    "urn:oasis:names:tc:SAML:2.0:nameid-format:transient",
-                    "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
-                    "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
-                    "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified");
-
-                // fix unspecified format, 2.0 --> 1.1
-                if ("urn:oasis:names:tc:SAML:2.0:nameid-format:unspecified" === $entry['value']) {
-                    $entry['value'] = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified";
-                }
-
-                if (!in_array($entry['value'], $validNameIDs)) {
-                    echo "WARNING: " . $entityId . " has invalid NameIDFormat '" . $entry['value'] . "'" . PHP_EOL;
-                }
-
-                $metadata['NameIDFormat'] = $entry['value'];
-            }
-
-            if ($entry['key'] === 'redirect.sign') {
-                if ($entry['value']) {
-                    echo "INFO: require signed AuthnRequest from " . $entityId . PHP_EOL;
-                }
-            }
-
-            // contacts
-            if (strpos($entry['key'], 'contacts:') === 0) {
-                // determine number
-                list($c_foo, $c_no, $c_t) = explode(":", $entry['key']);
-                $contacts[$c_no][$c_t] = $entry['value'];
-            }
-
-            // name
-            if (strpos($entry['key'], 'name:') === 0) {
-                list(, $c_lang) = explode(":", $entry['key']);
-                $name[$c_lang] = $entry['value'];
-            }
-            // displayName
-            if (strpos($entry['key'], 'displayName:') === 0) {
-                list(, $c_lang) = explode(":", $entry['key']);
-                $displayName[$c_lang] = $entry['value'];
-            }
-
-            // OAuth related stuff
-            if ("coin:gadgetbaseurl" === $entry['key']) {
-                $oauth['client_id'] = $entry['value'];
-            }
-
-            if ("coin:oauth:secret" === $entry['key']) {
-                $oauth['client_secret'] = $entry['value'];
-            }
-
-            if ("coin:oauth:callback_url" === $entry['key']) {
-                $oauth['client_redirectUri'] = $entry['value'];
-            }
-
-        }
-
-        cleanupName($entityId, $metadata, $name, $displayName);
-
-        // cleanup contacts
-        $metadata['contacts'] = cleanUpContacts($contacts);
-
-        // ACS must be set
-        if (!array_key_exists("AssertionConsumerService", $metadata) || empty($metadata['AssertionConsumerService'])) {
-            echo "WARNING: AssertionConsumerService not set for $entityId" . PHP_EOL;
-
-            return FALSE;
-        }
-        if (empty($metadata['AssertionConsumerService'])) {
-            echo "WARNING: AssertionConsumerService not set for $entityId" . PHP_EOL;
-
-            return FALSE;
-        }
-        if (!array_key_exists("NameIDFormat", $metadata) || empty($metadata['NameIDFormat'])) {
-            $metadata['NameIDFormat'] = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient";
-        }
-
-        // OAuth
-        if (!empty($oauth)) {
-            echo "INFO: OAuth for $entityId: (" . json_encode($oauth) . ")" . PHP_EOL;
-        }
-
-    }
-
-    return $metadata;
-}
-
-function cleanUpContacts(array $contacts)
-{
-    $cleanedContacts = array();
-    foreach ($contacts as $k => $v) {
-        if (array_key_exists("contactType", $v)) {
-            if (in_array($v['contactType'], array("technical", "administrative", "support"))) {
-                if (array_key_exists("emailAddress", $v) && !empty($v['emailAddress'])) {
-                    if (FALSE !== filter_var($v['emailAddress'], FILTER_VALIDATE_EMAIL)) {
-                        // valid email address, valid contact type
-                        $c = array("emailAddress" => $v['emailAddress'], "contactType" => $v['contactType']);
-                        if (array_key_exists("givenName", $v) && !empty($v['givenName'])) {
-                            $c['givenName'] = $v['givenName'];
-                        }
-                        if (array_key_exists("surName", $v) && !empty($v['surName'])) {
-                            $c['surName'] = $v['surName'];
-                        }
-                        array_push($cleanedContacts, $c);
-                    }
-                }
-            }
-        }
-    }
-
-    return $cleanedContacts;
-}
-
-function cleanupName($entityId, array &$metadata, array $name, array $displayName)
-{
-    // remove empty names
-    foreach ($name as $lang => $value) {
-        if (empty($value)) {
-            unset($name[$lang]);
-        }
-    }
-
-    // remove empty displayNames
-    foreach ($displayName as $lang => $value) {
-        if (empty($value)) {
-            unset($displayName[$lang]);
-        }
-    }
-
-    if (count(array_diff(array_keys($name), array_keys($displayName))) !== 0) {
-        echo "WARNING: name and displayName do not have same languages for " . $entityId . PHP_EOL;
+    $metadata['metadata-set'] = $r['type'] . "-remote";
+    $metadata['state'] = $r['state'];
+
+    $log[$metadata['metadata-set']][$metadata['entityid']] = array();
+
+    if ($metadata['metadata-set'] === "saml20-sp-remote") {
+        $metadata['IDPList'] = $a;
+        $saml20_sp[$r['entityid']] = $metadata;
+    } elseif ($metadata['metadata-set'] === "saml20-idp-remote") {
+        $metadata['SPList'] = $a;
+        $saml20_idp[$r['entityid']] = $metadata;
     } else {
-        // same languages
-        foreach ($name as $lang => $value) {
-            if ($value !== $displayName[$lang]) {
-                echo "WARNING: mismatch between name and displayName '" . $lang . "' [" . $value . "," . $displayName[$lang] . "] for " . $entityId . PHP_EOL;
+        throw new Exception("unsupported entity type");
+    }
+}
+
+echo count($saml20_idp) . " IdPs" . PHP_EOL;
+echo count($saml20_sp) . " SPs" . PHP_EOL;
+
+findAclConflicts($saml20_idp, $saml20_sp);
+moveAclToSP($saml20_idp, $saml20_sp);
+
+convertToUIInfo($saml20_idp);
+convertToUIInfo($saml20_sp);
+
+validateContacts($saml20_idp);
+validateContacts($saml20_sp);
+
+validateEndpoints($saml20_idp);
+validateEndpoints($saml20_sp);
+
+checkName($saml20_idp);
+checkName($saml20_sp);
+
+if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", json_encode(array_values($saml20_idp)))) {
+    throw new Exception("unable to write 'saml20-idp-remote.json'");
+}
+if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-sp-remote.json", json_encode(array_values($saml20_sp)))) {
+    throw new Exception("unable to write 'saml20-sp-remote.json'");
+}
+
+sort($allAttributes);
+if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "allAttributes.json", json_encode(array_values($allAttributes)))) {
+    throw new Exception("unable to write 'allAttributes.json'");
+}
+
+if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "entityLog.json", json_encode($log))) {
+    throw new Exception("unable to write 'entityLog.json'");
+}
+
+function arrayizeMetadata(&$metadata)
+{
+    foreach ($metadata as $k => $v) {
+        // if k contain as colon there may be multiple values underneath
+        if (empty($v)) {
+            unset($metadata[$k]);
+        } else {
+            if (FALSE !== strpos($k, ":")) {
+                $e = explode(":", $k);
+                if (2 === count($e)) {
+                    // only simple case for now
+                    $metadata[$e[0]][$e[1]] = $v;
+                    unset($metadata[$k]);
+                } elseif (3 === count($e)) {
+                    $metadata[$e[0]][$e[1]][$e[2]] = $v;
+                    unset($metadata[$k]);
+                } elseif (4 === count($e)) {
+                    $metadata[$e[0]][$e[1]][$e[2]][$e[4]] = $v;
+                    unset($metadata[$k]);
+                } else {
+                    throw new Exception("unsupported array depth in metadata");
+                }
+            }
+        }
+    }
+}
+
+function findAclConflicts(&$idp, &$sp)
+{
+    foreach ($sp as $eid => $metadata) {
+        if (!$metadata['allowAll']) {
+            _l($metadata, "WARNING", "'allowAll' not set");
+            foreach ($metadata['IDPList'] as $i) {
+                if (!array_key_exists($i, $idp)) {
+                    _l($metadata, "WARNING", "IdP '$i' does not exist");
+                    continue;
+                }
+                if (!in_array($eid, $idp[$i]['SPList'])) {
+                    _l($metadata, "WARNING", "IdP '$i' does not have this SP listed");
+                    // FIXME: add also IdP log item?
+                    continue;
+                }
             }
         }
     }
 
-    // fill displayName based on name if displayName for that language is not set...
-    foreach ($name as $lang => $value) {
-        if (!array_key_exists($lang, $displayName)) {
-            $displayName[$lang] = $value;
+    foreach ($idp as $eid => $metadata) {
+        if ($metadata['allowAll']) {
+            _l($metadata, "WARNING", "'allowAll' set");
+            continue;
+        }
+        foreach ($metadata['SPList'] as $s) {
+            if (!array_key_exists($s, $sp)) {
+                _l($metadata, "WARNING", "SP $s does not exist");
+                continue;
+            }
+            if ($sp[$s]['allowAll']) {
+                continue;
+            }
+            if (!in_array($eid, $sp[$s]['IDPList'])) {
+                _l($metadata, "WARNING", "SP $s does not have this IdP listed");
+            }
         }
     }
+}
 
-    // fill name based on displayName if name for that language is not set...
-    foreach ($displayName as $lang => $value) {
-        if (!array_key_exists($lang, $name)) {
-            $name[$lang] = $value;
+function validateContacts(&$entities)
+{
+    foreach ($entities as $eid => $metadata) {
+        if (array_key_exists("contacts", $metadata)) {
+            foreach ($metadata['contacts'] as $k => $v) {
+                $filteredContact = filterContact($v);
+                if (FALSE !== $filteredContact) {
+                    $entities[$eid]["contacts"][$k] = $filteredContact;
+                } else {
+                    unset($entities[$eid]["contacts"][$k]);
+                }
+            }
+            $entities[$eid]['contacts'] = array_values($entities[$eid]['contacts']);
         }
     }
+}
 
-    if (!array_key_exists("en", $name)) {
-        echo "WARNING: missing EN name for " . $entityId . PHP_EOL;
+function validateEndpoints(&$entities)
+{
+    $endpointTypes = array("SingleLogoutService", "SingleSignOnService", "AssertionConsumerService");
+
+    foreach ($entities as $eid => $metadata) {
+        foreach ($endpointTypes as $type) {
+            if (array_key_exists($type, $metadata)) {
+                foreach ($metadata[$type] as $k => $v) {
+                    $filteredEndpoint = filterEndpoint($v);
+                    if (FALSE !== $filteredEndpoint) {
+                        $entities[$eid][$type][$k] = $filteredEndpoint;
+                    } else {
+                        _l($metadata, "WARNING", "invalid endpoint configuration");
+                        unset($entities[$eid][$type][$k]);
+                    }
+                }
+                $entities[$eid][$type] = array_values($entities[$eid][$type]);
+                if (0 === count($entities[$eid][$type])) {
+                    unset($entities[$eid][$type]);
+                }
+            }
+        }
+    }
+}
+
+function convertToUIInfo(&$entities)
+{
+    // some keys belong in UIInfo (under a different name)
+    foreach ($entities as $eid => $metadata) {
+        $uiInfo = array();
+        $discoHints = array();
+
+        if (array_key_exists("displayName", $metadata)) {
+            $uiInfo['DisplayName'] = $metadata['displayName'];
+            unset($entities[$eid]['displayName']);
+        }
+        if (array_key_exists("keywords", $metadata)) {
+            foreach ($metadata['keywords'] as $language => $keywords) {
+                $filteredKeywords = filterKeywords($keywords);
+                if (0 !== count($filteredKeywords)) {
+                    $uiInfo['Keywords'][$language] = $filteredKeywords;
+                }
+            }
+            unset($entities[$eid]['keywords']);
+        }
+        if (array_key_exists("geoLocation", $metadata)) {
+            $geo = validateGeo($metadata['geoLocation']);
+            if (FALSE !== count($geo)) {
+                $discoHints['GeolocationHint'] = array($geo);
+            } else {
+                _l($metadata, "WARNING", "invalid GeolocationHint");
+            }
+            unset($entities[$eid]['geoLocation']);
+        }
+        if (array_key_exists("logo", $metadata)) {
+            $logo = validateLogo($metadata["logo"][0]);
+            if (FALSE !== $logo) {
+                $uiInfo['Logo'] = array($logo);
+            } else {
+                _l($metadata, "WARNING", "invalid Logo configuration");
+            }
+            unset($entities[$eid]['logo']);
+        }
+        if (0 !== count($uiInfo)) {
+            $entities[$eid]['UIInfo'] = $uiInfo;
+        }
+        if (0 !== count($discoHints)) {
+            $entities[$eid]['DiscoHints'] = $discoHints;
+        }
+
+    }
+}
+
+function validateLogo(array $logo)
+{
+    if (!array_key_exists("url", $logo)) {
+        return FALSE;
+    }
+    if (FALSE === filter_var($logo['url'], FILTER_VALIDATE_URL, FILTER_FLAG_PATH_REQUIRED)) {
+        return FALSE;
+    }
+    if (!array_key_exists("width", $logo) || !is_numeric($logo['width'])) {
+        return FALSE;
+    }
+    if (!array_key_exists("height", $logo) || !is_numeric($logo['height'])) {
+        return FALSE;
     }
 
-    if (!array_key_exists("en", $displayName)) {
-        echo "WARNING: missing EN displayName for " . $entityId . PHP_EOL;
+    $l = array ("url" => $logo['url'], "width" => (int) $logo['width'], "height" => (int) $logo['height']);
+    if (array_key_exists("lang", $logo) && !empty($logo['lang'])) {
+        $l['lang'] = $logo['lang'];
     }
 
-    if (!empty($name)) {
-        $metadata['name'] = $name;
+    return $l;
+}
+
+function moveAclToSP(&$idp, &$sp)
+{
+    // remove the ACL from all SPs
+    foreach ($sp as $eid => $metadata) {
+        $sp[$eid]["IDPList"] = array();
     }
-    if (!empty($displayName)) {
-        $metadata['UIInfo']['DisplayName'] = $displayName;
+
+    // for every IdP take the ACL and add its eid to the SP "IDPList" in the ACL list
+    foreach ($idp as $eid => $metadata) {
+        foreach ($metadata['SPList'] as $s) {
+            if (!array_key_exists($s, $sp)) {
+                _l($metadata, "WARNING", "SP $s does not exist");
+                continue;
+            }
+            array_push($sp[$s]["IDPList"], $eid);
+        }
+        // remove the ACL from the IdP
+        unset($idp[$eid]['SPList']);
     }
+}
+
+function filterKeywords($keywords)
+{
+    $keywordsArray = explode(" ", $keywords);
+    foreach ($keywordsArray as $k) {
+        $keywordsArray = array_filter($keywordsArray, function($v) {
+            if (empty($v)) {
+                return FALSE;
+            }
+            if (strpos($v, "+") !== FALSE) {
+                return FALSE;
+            }
+            if (htmlentities($v) !== $v) {
+                return FALSE;
+            }
+
+            return TRUE;
+        });
+    }
+    sort($keywordsArray);
+
+    return array_values(array_unique($keywordsArray));
+}
+
+function filterContact(array $contact)
+{
+    $validContactTypes = array ("technical", "administrative", "support");
+    if (!array_key_exists("contactType", $contact)) {
+        return FALSE;
+    }
+    if (!in_array($contact['contactType'], $validContactTypes)) {
+        return FALSE;
+    }
+    if (!array_key_exists("emailAddress", $contact)) {
+        return FALSE;
+    }
+    $c = array("contactType" => $contact['contactType'], "emailAddress" => $contact['emailAddress']);
+    if (array_key_exists("givenName", $contact) && !empty($contact['givenName'])) {
+        $c['givenName'] = $contact['givenName'];
+    }
+    if (array_key_exists("surName", $contact) && !empty($contact['surName'])) {
+        $c['surName'] = $contact['surName'];
+    }
+
+    return $c;
+}
+
+function filterEndpoint(array $ep)
+{
+    // an ACS, SSO or SLO should have a "Binding" and a "Location" field
+    if (!array_key_exists("Location", $ep)) {
+        return FALSE;
+    }
+    if (!array_key_exists("Binding", $ep)) {
+        return FALSE;
+    }
+    $validatedEndpoint = array("Location" => $ep['Location'], "Binding" => $ep['Binding']);
+    if (array_key_exists("Index", $ep) && !empty($ep['Index'])) {
+        $validatedEndpoint['Index'] = $ep['Index'];
+    }
+
+    return $validatedEndpoint;
+}
+
+function checkName(&$entities)
+{
+    foreach ($entities as $eid => $metadata) {
+        if (array_key_exists("name", $metadata) && is_array($metadata['name']) && array_key_exists("en", $metadata["name"]) && !empty($metadata["name"]["en"])) {
+            // all is fine
+            continue;
+        } else {
+            _l($metadata, "WARNING", "no name set");
+        }
+    }
+}
+
+function validateGeo($geoHints)
+{
+    if (!empty($geoHints)) {
+        $e = explode(",", $geoHints);
+        if (2 !== count($e) && 3 !== count($e)) {
+            return FALSE;
+        }
+        if (2 === count($e)) {
+            list($lat, $lon) = $e;
+            $lat = trim($lat);
+            $lon = trim($lon);
+
+            return "geo:$lat,$lon";
+        }
+        if (3 === count($e)) {
+            list($lat, $lon, $alt) = $e;
+            $lat = trim($lat);
+            $lon = trim($lon);
+            $alt = trim($alt);
+
+            return "geo:$lat,$lon,$alt";
+        }
+    }
+}
+
+function _l($metadata, $level, $message)
+{
+    global $log;
+    array_push($log[$metadata['metadata-set']][$metadata['entityid']], array("level" => $level, "message" => $message));
 }
