@@ -105,7 +105,8 @@ EOF;
     $metadata['metadata-set'] = $r['type'] . "-remote";
     $metadata['state'] = $r['state'];
 
-    $log[$metadata['metadata-set']][$metadata['entityid']] = array();
+    $log[$metadata['metadata-set']][$metadata['entityid']]['messages'] = array();
+    $log[$metadata['metadata-set']][$metadata['entityid']]['state'] = $metadata['state'];
 
     if ($metadata['metadata-set'] === "saml20-sp-remote") {
         $metadata['IDPList'] = $a;
@@ -148,6 +149,7 @@ if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "allAttributes
     throw new Exception("unable to write 'allAttributes.json'");
 }
 
+cleanLog();
 if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "entityLog.json", json_encode($log))) {
     throw new Exception("unable to write 'entityLog.json'");
 }
@@ -189,7 +191,7 @@ function findAclConflicts(&$idp, &$sp)
                     _l($metadata, "WARNING", "IdP '$i' does not exist");
                     continue;
                 }
-                if (!in_array($eid, $idp[$i]['SPList'])) {
+                if (!in_array($eid, $idp[$i]['SPList']) && !$idp[$i]['allowAll']) {
                     _l($metadata, "WARNING", "IdP '$i' does not have this SP listed");
                     // FIXME: add also IdP log item?
                     continue;
@@ -455,5 +457,18 @@ function validateGeo($geoHints)
 function _l($metadata, $level, $message)
 {
     global $log;
-    array_push($log[$metadata['metadata-set']][$metadata['entityid']], array("level" => $level, "message" => $message));
+    array_push($log[$metadata['metadata-set']][$metadata['entityid']]['messages'], array("level" => $level, "message" => $message));
+}
+
+// remove entries that do not have a log message
+function cleanLog()
+{
+    global $log;
+    foreach ($log as $set => $entities) {
+        foreach ($entities as $k => $v) {
+            if (0 === count($v['messages'])) {
+                unset($log[$set][$k]);
+            }
+        }
+    }
 }
