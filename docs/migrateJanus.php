@@ -9,7 +9,9 @@ $requestedState = ($argc > 2) ? $argv[2] : NULL;
 
 $data = array();
 
-$pdo = new PDO("mysql:host=127.0.0.1;dbname=sr", "root", NULL);
+$dbConfig = json_decode(file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . "db.json"), TRUE);
+
+$pdo = new PDO($dbConfig['dsn'], $dbConfig['user'], $dbConfig['pass']);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
 $sql = <<< EOF
