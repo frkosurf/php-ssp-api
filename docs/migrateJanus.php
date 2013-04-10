@@ -3,7 +3,9 @@
 if ($argc < 2) {
     die("specify the directory to write the JSON data to" . PHP_EOL);
 }
+
 $dirName = $argv[1];
+$requestedState = ($argc > 2) ? $argv[2] : NULL;
 
 $data = array();
 
@@ -143,6 +145,11 @@ checkOrganizationDisplayName($saml20_idp);
 checkOrganizationDisplayName($saml20_sp);
 
 removeSecrets($saml20_sp);
+
+if (NULL !== $requestedState) {
+    filterState($saml20_idp, $requestedState);
+    filterState($saml20_sp, $requestedState);
+}
 
 if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", json_encode(array_values($saml20_idp)))) {
     throw new Exception("unable to write 'saml20-idp-remote.json'");
@@ -450,6 +457,20 @@ function removeSecrets(&$entities)
         }
         if (isset($metadata['coin']['oauth']['consumer_secret'])) {
             $entities[$eid]['coin']['oauth']['consumer_secret'] = 'REPLACED_BY_MIGRATE_SCRIPT';
+        }
+        if (isset($metadata['coin']['provision_password'])) {
+            $entities[$eid]['coin']['provision_password'] = 'REPLACED_BY_MIGRATE_SCRIPT';
+        }
+    }
+}
+
+function filterState(&$entities, $requestedState)
+{
+    global $log;
+    foreach ($entities as $eid => $metadata) {
+        if ($requestedState !== $metadata['state']) {
+            unset($entities[$eid]);
+            unset($log[$metadata['metadata-set']][$eid]);
         }
     }
 }
