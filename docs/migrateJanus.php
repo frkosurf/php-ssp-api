@@ -99,6 +99,8 @@ EOF;
     $metadata['allowAll'] = "yes" === $r['allowedall'];
 
     $metadata['entityid'] = $r['entityid'];
+    $metadata['eid'] = $r['eid'];
+
     if (!empty($r['metadataurl'])) {
         $metadata['metadata-url'] = $r['metadataurl'];
     }
@@ -107,7 +109,7 @@ EOF;
 
     $log[$metadata['metadata-set']][$metadata['entityid']]['messages'] = array();
     $log[$metadata['metadata-set']][$metadata['entityid']]['state'] = $metadata['state'];
-
+    $log[$metadata['metadata-set']][$metadata['entityid']]['eid'] = $metadata['eid'];
     if ($metadata['metadata-set'] === "saml20-sp-remote") {
         $metadata['IDPList'] = $a;
         $saml20_sp[$r['entityid']] = $metadata;
@@ -136,6 +138,9 @@ validateEndpoints($saml20_sp);
 
 checkName($saml20_idp);
 checkName($saml20_sp);
+
+checkOrganizationDisplayName($saml20_idp);
+checkOrganizationDisplayName($saml20_sp);
 
 if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", json_encode(array_values($saml20_idp)))) {
     throw new Exception("unable to write 'saml20-idp-remote.json'");
@@ -292,11 +297,12 @@ function convertToUIInfo(&$entities)
             unset($entities[$eid]['geoLocation']);
         }
         if (array_key_exists("logo", $metadata)) {
-            $logo = validateLogo($metadata["logo"][0]);
+            $errorMessage = array();
+            $logo = validateLogo($metadata["logo"][0], $errorMessage);
             if (FALSE !== $logo) {
                 $uiInfo['Logo'] = array($logo);
             } else {
-                _l($metadata, "WARNING", "invalid Logo configuration");
+                _l($metadata, "WARNING", "invalid Logo configuration (" . implode(", ", $errorMessage) . ")");
             }
             unset($entities[$eid]['logo']);
         }
@@ -310,18 +316,23 @@ function convertToUIInfo(&$entities)
     }
 }
 
-function validateLogo(array $logo)
+function validateLogo(array $logo, array &$errorMessage)
 {
     if (!array_key_exists("url", $logo)) {
-        return FALSE;
-    }
-    if (FALSE === filter_var($logo['url'], FILTER_VALIDATE_URL, FILTER_FLAG_PATH_REQUIRED)) {
-        return FALSE;
+        array_push($errorMessage, "missing URL");
+    } else {
+        if (FALSE === filter_var($logo['url'], FILTER_VALIDATE_URL, FILTER_FLAG_PATH_REQUIRED)) {
+            array_push($errorMessage, "invalid URL");
+        }
     }
     if (!array_key_exists("width", $logo) || !is_numeric($logo['width'])) {
-        return FALSE;
+        array_push($errorMessage, "missing or invalid width");
     }
     if (!array_key_exists("height", $logo) || !is_numeric($logo['height'])) {
+        array_push($errorMessage, "missing or invalid height");
+    }
+
+    if (0 !== count($errorMessage)) {
         return FALSE;
     }
 
@@ -417,6 +428,18 @@ function filterEndpoint(array $ep)
     return $validatedEndpoint;
 }
 
+function checkOrganizationDisplayName(&$entities)
+{
+    foreach ($entities as $eid => $metadata) {
+        if (array_key_exists("OrganizationDisplayName", $metadata) && is_array($metadata['OrganizationDisplayName']) && array_key_exists("en", $metadata["OrganizationDisplayName"]) && !empty($metadata["OrganizationDisplayName"]["en"])) {
+            // all is fine
+            continue;
+        } else {
+            _l($metadata, "WARNING", "no OrganizationDisplayName:en set");
+        }
+    }
+}
+
 function checkName(&$entities)
 {
     foreach ($entities as $eid => $metadata) {
@@ -424,7 +447,7 @@ function checkName(&$entities)
             // all is fine
             continue;
         } else {
-            _l($metadata, "WARNING", "no name set");
+            _l($metadata, "WARNING", "no name:en set");
         }
     }
 }
