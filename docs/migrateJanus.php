@@ -142,6 +142,8 @@ checkName($saml20_sp);
 checkOrganizationDisplayName($saml20_idp);
 checkOrganizationDisplayName($saml20_sp);
 
+removeSecrets($saml20_sp);
+
 if (FALSE === @file_put_contents($argv[1] . DIRECTORY_SEPARATOR . "saml20-idp-remote.json", json_encode(array_values($saml20_idp)))) {
     throw new Exception("unable to write 'saml20-idp-remote.json'");
 }
@@ -436,6 +438,18 @@ function checkOrganizationDisplayName(&$entities)
             continue;
         } else {
             _l($metadata, "WARNING", "no OrganizationDisplayName:en set");
+        }
+    }
+}
+
+function removeSecrets(&$entities)
+{
+    foreach ($entities as $eid => $metadata) {
+        if (isset($metadata['coin']['oauth']['secret'])) {
+            $entities[$eid]['coin']['oauth']['secret'] = 'REPLACED_BY_MIGRATE_SCRIPT';
+        }
+        if (isset($metadata['coin']['oauth']['consumer_secret'])) {
+            $entities[$eid]['coin']['oauth']['consumer_secret'] = 'REPLACED_BY_MIGRATE_SCRIPT';
         }
     }
 }
