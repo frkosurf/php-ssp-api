@@ -41,11 +41,6 @@ class Entity
             throw new EntityException("missing or empty entityid");
         }
 
-        // no whitespace allowed at beginning or end of entityid
-        if (trim($entityData['entityid']) !== $entityData['entityid']) {
-            throw new EntityException("invalid entityid, no whitespace allowed at beginning or end");
-        }
-
         try {
             $builder = new SimpleSAML_Metadata_SAMLBuilder($entityData['entityid']);
             $builder->addMetadata($type, $entityData);
