@@ -33,7 +33,7 @@ class SspApi
     {
         $response = new HttpResponse(200, "application/json");
 
-        $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
+        $this->_resourceServer->verifyRequest($request->getHeaders(), $request->getQueryParameters());
         $this->_resourceServer->requireScope("ssp");
 
         $searchQuery = $request->getQueryParameter('searchQuery');
@@ -49,7 +49,7 @@ class SspApi
     {
         $response = new HttpResponse(200, "application/json");
 
-        $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
+        $this->_resourceServer->verifyRequest($request->getHeaders(), $request->getQueryParameters());
         $this->_resourceServer->requireScope("ssp");
 
         $entityId = $request->getQueryParameter('id');
@@ -71,7 +71,7 @@ class SspApi
     {
         $response = new HttpResponse(200, "application/json");
 
-        $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
+        $this->_resourceServer->verifyRequest($request->getHeaders(), $request->getQueryParameters());
         $this->_resourceServer->requireScope("ssp");
 
         $entityId = $request->getQueryParameter('id');
@@ -90,7 +90,7 @@ class SspApi
     {
         $response = new HttpResponse(200, "application/json");
 
-        $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
+        $this->_resourceServer->verifyRequest($request->getHeaders(), $request->getQueryParameters());
         $this->_resourceServer->requireScope("ssp");
 
         $entityId = $request->getQueryParameter('id');
@@ -116,7 +116,7 @@ class SspApi
     {
         $response = new HttpResponse(200, "application/json");
 
-        $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
+        $this->_resourceServer->verifyRequest($request->getHeaders(), $request->getQueryParameters());
         $this->_resourceServer->requireScope("ssp");
 
         $e = new Entity($this->_config);
