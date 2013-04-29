@@ -2,8 +2,8 @@ serviceName = "php-ssp-api"
 
 ; OAuth AS
 [OAuth]
-tokenInfoEndpoint = "http://localhost/php-oauth/tokeninfo.php"
-resourceServerRealm = "simpleSAMLphp API"
+introspectionEndpoint = "http://localhost/php-oauth/introspect.php"
+realm = "simpleSAMLphp API"
 
 [PdoStorage]
 dsn = "sqlite:/PATH/TO/APP/data/metadata.sqlite"

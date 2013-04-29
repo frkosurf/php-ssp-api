@@ -24,7 +24,6 @@ class SspApi
         $this->_storage = new PdoStorage($this->_config);
 
         $rsConfig = $this->_config->getSectionValues("OAuth");
-        $rsConfig += array("throwException" => TRUE);
 
         $this->_resourceServer = new RemoteResourceServer($rsConfig);
     }
@@ -33,8 +32,8 @@ class SspApi
     {
         $response = new HttpResponse(200, "application/json");
 
-        $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
-        $this->_resourceServer->requireScope("ssp");
+        $introspection = $this->_resourceServer->verifyRequest($request->getHeaders(), $request->getQueryParameters());
+        $introspection->requireScope("ssp");
 
         $searchQuery = $request->getQueryParameter('searchQuery');
 
@@ -49,8 +48,8 @@ class SspApi
     {
         $response = new HttpResponse(200, "application/json");
 
-        $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
-        $this->_resourceServer->requireScope("ssp");
+        $introspection = $this->_resourceServer->verifyRequest($request->getHeaders(), $request->getQueryParameters());
+        $introspection->requireScope("ssp");
 
         $entityId = $request->getQueryParameter('id');
         if (NULL === $entityId) {
@@ -71,8 +70,8 @@ class SspApi
     {
         $response = new HttpResponse(200, "application/json");
 
-        $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
-        $this->_resourceServer->requireScope("ssp");
+        $introspection = $this->_resourceServer->verifyRequest($request->getHeaders(), $request->getQueryParameters());
+        $introspection->requireScope("ssp");
 
         $entityId = $request->getQueryParameter('id');
         if (NULL === $entityId) {
@@ -90,8 +89,8 @@ class SspApi
     {
         $response = new HttpResponse(200, "application/json");
 
-        $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
-        $this->_resourceServer->requireScope("ssp");
+        $introspection = $this->_resourceServer->verifyRequest($request->getHeaders(), $request->getQueryParameters());
+        $introspection->requireScope("ssp");
 
         $entityId = $request->getQueryParameter('id');
         if (NULL === $entityId) {
@@ -116,8 +115,8 @@ class SspApi
     {
         $response = new HttpResponse(200, "application/json");
 
-        $this->_resourceServer->verifyAuthorizationHeader($request->getHeader("Authorization"));
-        $this->_resourceServer->requireScope("ssp");
+        $introspection = $this->_resourceServer->verifyRequest($request->getHeaders(), $request->getQueryParameters());
+        $introspection->requireScope("ssp");
 
         $e = new Entity($this->_config);
         try {

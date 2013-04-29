@@ -15,14 +15,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . "lib" . DIRECTORY_SEPARATOR . "SplClassLoader.php";
-
-$c1 = new SplClassLoader("RestService", "../extlib/php-rest-service/lib");
-$c1->register();
-$c2 = new SplClassLoader("OAuth", "../extlib/php-lib-remote-rs/lib");
-$c2->register();
-$c3 = new SplClassLoader("SspApi", "../lib");
-$c3->register();
+require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . "lib" . DIRECTORY_SEPARATOR . "_autoload.php";
 
 use \RestService\Http\HttpRequest as HttpRequest;
 use \RestService\Http\HttpResponse as HttpResponse;
@@ -38,6 +31,7 @@ use \OAuth\RemoteResourceServerException as RemoteResourceServerException;
 $logger = NULL;
 $request = NULL;
 $response = NULL;
+$config = NULL;
 
 try {
     $config = new Config(dirname(__DIR__) . DIRECTORY_SEPARATOR . "config" . DIRECTORY_SEPARATOR . "config.ini");
@@ -85,8 +79,11 @@ try {
         $logger->logFatal($e->getLogMessage(TRUE) . PHP_EOL . $request . PHP_EOL . $response);
     }
 } catch (RemoteResourceServerException $e) {
+    $e->setRealm($config->getSectionValue('OAuth', 'realm', FALSE));
     $response = new HttpResponse($e->getResponseCode());
-    $response->setHeader("WWW-Authenticate", $e->getAuthenticateHeader());
+    if (NULL !== $e->getAuthenticateHeader()) {
+        $response->setHeader("WWW-Authenticate", $e->getAuthenticateHeader());
+    }
     $response->setHeader("Content-Type", "application/json");
     $response->setContent(json_encode(array("error" => $e->getMessage(), "error_description" => $e->getDescription())));
     if (NULL !== $logger) {
